@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Attendance</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: var(--hub-bg, #f9fafb);
+      --surface: var(--hub-surface, #ffffff);
+      --border: var(--hub-border, #e5e7eb);
+      --border-mid: var(--hub-border, #d1d5db);
+      --text: var(--hub-text, #111827);
+      --muted: var(--hub-text-muted, #6b7280);
+      --accent: var(--hub-primary, #111827);
+      --accent-hover: var(--hub-primary-hover, #374151);
+      --accent-fg: var(--hub-primary-fg, #ffffff);
+      --radius: var(--hub-radius, 10px);
+      --green: #047857; --green-soft: #d1fae5;
+      --amber: #b45309; --amber-soft: #fef3c7;
+      --red: #b91c1c; --red-soft: #fee2e2;
+      --blue: #1d4ed8; --blue-soft: #dbeafe;
+      --shadow: 0 1px 3px rgba(15, 23, 42, .07);
+    }
+    body {
+      min-height: 100vh; background: var(--bg); color: var(--text);
+      font-family: var(--hub-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      font-size: var(--hub-font-size, 15px); line-height: 1.5;
+    }
+    .app { max-width: 680px; margin: 0 auto; padding: 16px; }
+    .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    h1 { font-size: 1.35rem; line-height: 1.2; }
+    h2 { font-size: .95rem; }
+    .muted { color: var(--muted); }
+    .tiny { font-size: .78rem; }
+    .stack { display: grid; gap: 8px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      border: 1px solid transparent; border-radius: 8px; padding: 8px 12px;
+      font: inherit; font-size: .86rem; font-weight: 700; cursor: pointer;
+      min-height: 38px; background: var(--accent); color: var(--accent-fg);
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn:disabled { opacity: .48; cursor: default; }
+    .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-mid); }
+    .btn-ghost:hover { background: rgba(127,127,127,.08); }
+    .btn-danger { background: var(--red-soft); color: var(--red); }
+    .btn-sm { min-height: 31px; padding: 5px 10px; font-size: .78rem; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; }
+    .back { background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; font-size: .82rem; font-weight: 700; padding: 0; margin-bottom: 8px; }
+    .event-card {
+      display: flex; align-items: center; gap: 12px; padding: 12px 14px; width: 100%;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow); cursor: pointer; text-align: left; font: inherit; color: var(--text);
+    }
+    .event-card:hover { border-color: var(--accent); }
+    .event-body { flex: 1; min-width: 0; }
+    .event-title { font-weight: 750; }
+    .event-meta { color: var(--muted); font-size: .8rem; }
+    .pill {
+      display: inline-flex; align-items: center; min-height: 20px; padding: 1px 9px;
+      border-radius: 999px; white-space: nowrap; background: #f1f5f9; color: var(--muted);
+      font-size: .72rem; font-weight: 800;
+    }
+    .pill.green { background: var(--green-soft); color: var(--green); }
+    .roster-row {
+      display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    }
+    .roster-name { flex: 1; font-weight: 700; font-size: .92rem; }
+    .status-btn {
+      border: 1px solid var(--border-mid); background: var(--surface); border-radius: 999px;
+      padding: 4px 12px; font: inherit; font-size: .8rem; font-weight: 800; cursor: pointer; color: var(--muted);
+      min-width: 110px;
+    }
+    .status-btn.present { background: var(--green-soft); color: var(--green); border-color: transparent; }
+    .status-btn.late { background: var(--amber-soft); color: var(--amber); border-color: transparent; }
+    .status-btn.excused { background: var(--blue-soft); color: var(--blue); border-color: transparent; }
+    .status-btn.absent { background: var(--red-soft); color: var(--red); border-color: transparent; }
+    .status-chip { min-width: 110px; text-align: center; font-size: .8rem; font-weight: 800; color: var(--muted); }
+    .summary-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+    .summary-name { flex: 1; font-weight: 700; }
+    .bar { width: 110px; height: 7px; background: var(--border); border-radius: 999px; overflow: hidden; }
+    .bar > span { display: block; height: 100%; background: var(--green); border-radius: 999px; }
+    .rate { width: 74px; text-align: right; font-weight: 800; font-size: .84rem; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 18px 2px 8px; }
+    .empty { color: var(--muted); text-align: center; padding: 30px 16px; }
+    .error { background: var(--red-soft); color: var(--red); padding: 9px 12px; border-radius: 8px; margin-bottom: 10px; font-size: .86rem; }
+    input, select, textarea {
+      width: 100%; border: 1.5px solid var(--border-mid); border-radius: 8px;
+      padding: 9px 11px; font: inherit; background: var(--surface); color: var(--text);
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.42); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal { background: var(--surface); border-radius: 14px; padding: 22px; width: 100%; max-width: 440px; box-shadow: 0 20px 60px rgba(0,0,0,.25); max-height: 92vh; overflow-y: auto; }
+    .modal h2 { font-size: 1.05rem; margin-bottom: 16px; }
+    .form { display: grid; gap: 12px; }
+    .field { display: grid; gap: 5px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    label { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 800; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 6px; justify-content: flex-end; }
+    .modal-left { margin-right: auto; }
+    @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
+  </style>
+  <base href="/run/attendance/">
+</head>
+<body>
+<div class="app">
+  <div id="root" class="empty">Loading…</div>
+</div>
+
+<script type="module">
+import { esc, isAdult, hubConfirm } from "/hub-sdk.js";
+import {
+  STATUSES, statusMeta, nextStatus, splitEvents, recordsByMember,
+  memberSummary, headcount,
+} from "./logic.js";
+
+const CONTEXT = window.__CONTEXT_URL ?? "";
+const DB = window.__DB_URL ?? "";
+const HUB_MEMBER = window.__CURRENT_MEMBER ?? null;
+
+let members = [];
+let memberMap = new Map();
+let me = null;
+let events = [];
+let records = [];
+let openEventId = null;
+let error = "";
+let modalEl = null;
+
+function nowIso() { return new Date().toISOString(); }
+function canManage() { return !!me && isAdult(me); }
+function memberName(id) { return memberMap.get(id)?.name ?? "Former member"; }
+
+/* ── DB helper ─────────────────────────────────────────────────────────────── */
+async function db(sql, params = []) {
+  if (!DB) return { rows: [] };
+  const res = await fetch(DB, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sql, params }),
+  });
+  const json = await res.json();
+  if (json.error) throw new Error(json.error);
+  return json;
+}
+
+/* ── Loading ───────────────────────────────────────────────────────────────── */
+async function loadMembers() {
+  if (!CONTEXT) {
+    members = [
+      { id: "demo-1", name: "Alex (leader)", role: "adult" },
+      { id: "demo-2", name: "Jordan", role: "adult" },
+      { id: "demo-3", name: "Casey", role: "child" },
+      { id: "demo-4", name: "Riley", role: "child" },
+    ];
+  } else {
+    try {
+      const res = await fetch(`${CONTEXT}?keys=family.members`);
+      members = ((await res.json())["family.members"]) ?? [];
+    } catch { members = []; }
+  }
+  memberMap = new Map(members.map((m) => [m.id, m]));
+  me = HUB_MEMBER ?? members[0] ?? { id: "guest", name: "Guest", role: "adult" };
+}
+
+async function loadData() {
+  if (!DB) {
+    events = [
+      { id: "e1", title: "July meeting", kind: "meeting", event_date: "2026-07-08", start_time: "18:30", location: "Hall", notes: "", created_by: "demo-1", created_at: nowIso() },
+      { id: "e2", title: "Park cleanup", kind: "service", event_date: "2026-07-19", start_time: "09:00", location: "Miller Park", notes: "", created_by: "demo-1", created_at: nowIso() },
+    ];
+    records = [
+      { id: "r1", event_id: "e1", member_id: "demo-2", status: "present", note: "", recorded_by: "demo-1", created_at: nowIso() },
+      { id: "r2", event_id: "e1", member_id: "demo-3", status: "absent", note: "", recorded_by: "demo-1", created_at: nowIso() },
+      { id: "r3", event_id: "e1", member_id: "demo-4", status: "late", note: "", recorded_by: "demo-1", created_at: nowIso() },
+    ];
+    return;
+  }
+  const [e, r] = await Promise.all([
+    db("SELECT id, title, kind, event_date, start_time, location, notes, created_by, created_at FROM app_attendance__events ORDER BY event_date DESC LIMIT 300"),
+    db("SELECT id, event_id, member_id, status, note, recorded_by, created_at FROM app_attendance__records LIMIT 3000"),
+  ]);
+  events = e.rows ?? [];
+  records = r.rows ?? [];
+}
+
+async function refresh() {
+  error = "";
+  try {
+    await Promise.all([loadMembers(), loadData()]);
+    if (openEventId && !events.some((e) => e.id === openEventId)) openEventId = null;
+    render();
+  } catch (e) { error = e.message; render(); }
+}
+
+function showError(msg) { error = msg; render(); }
+
+/* ── Mutations ─────────────────────────────────────────────────────────────── */
+async function saveEvent(fields, existingId) {
+  const now = nowIso();
+  if (existingId) {
+    const idx = events.findIndex((e) => e.id === existingId);
+    const prev = idx !== -1 ? events[idx] : null;
+    if (idx !== -1) events[idx] = { ...events[idx], ...fields };
+    closeModal(); render();
+    try {
+      await db("UPDATE app_attendance__events SET title=?, kind=?, event_date=?, start_time=?, location=?, notes=? WHERE id=?",
+        [fields.title, fields.kind, fields.event_date, fields.start_time, fields.location, fields.notes, existingId]);
+    } catch (e) { if (idx !== -1 && prev) events[idx] = prev; showError(e.message); }
+  } else {
+    const row = { id: crypto.randomUUID(), ...fields, created_by: me.id, created_at: now };
+    events = [row, ...events];
+    openEventId = row.id;
+    closeModal(); render();
+    try {
+      await db("INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        [row.id, row.title, row.kind, row.event_date, row.start_time, row.location, row.notes, row.created_by, row.created_at]);
+    } catch (e) {
+      events = events.filter((x) => x.id !== row.id);
+      openEventId = null;
+      showError(e.message);
+    }
+  }
+}
+
+async function deleteEvent(id) {
+  const ok = await hubConfirm({ message: "Delete this event?", description: "Its attendance records go with it.", confirmLabel: "Delete", destructive: true });
+  if (!ok) return;
+  const prev = { events, records };
+  events = events.filter((e) => e.id !== id);
+  records = records.filter((r) => r.event_id !== id);
+  if (openEventId === id) openEventId = null;
+  closeModal(); render();
+  try { await db("DELETE FROM app_attendance__events WHERE id=?", [id]); }
+  catch (e) { ({ events, records } = prev); showError(e.message); }
+}
+
+/** Tap-to-cycle a member's status for an event (leader only). Upserts. */
+async function cycleStatus(eventId, memberId) {
+  const existing = records.find((r) => r.event_id === eventId && r.member_id === memberId);
+  const status = nextStatus(existing?.status);
+  const now = nowIso();
+  if (existing) {
+    const prev = { ...existing };
+    existing.status = status;
+    existing.recorded_by = me.id;
+    render();
+    try {
+      await db("UPDATE app_attendance__records SET status=?, recorded_by=? WHERE id=?", [status, me.id, existing.id]);
+    } catch (e) { Object.assign(existing, prev); showError(e.message); }
+    return;
+  }
+  const row = { id: crypto.randomUUID(), event_id: eventId, member_id: memberId, status, note: "", recorded_by: me.id, created_at: now };
+  records = [...records, row];
+  render();
+  try {
+    await db("INSERT INTO app_attendance__records (id, event_id, member_id, status, note, recorded_by, created_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT (event_id, member_id) DO UPDATE SET status = excluded.status, recorded_by = excluded.recorded_by",
+      [row.id, row.event_id, row.member_id, row.status, row.note, row.recorded_by, row.created_at]);
+  } catch (e) { records = records.filter((r) => r.id !== row.id); showError(e.message); }
+}
+
+/* ── Rendering ─────────────────────────────────────────────────────────────── */
+function fmtEventDate(iso, time) {
+  const d = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const base = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(d);
+  if (!time) return base;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(time);
+  if (!m) return base;
+  const h = Number(m[1]);
+  return `${base} · ${h % 12 === 0 ? 12 : h % 12}:${m[2]} ${h < 12 ? "AM" : "PM"}`;
+}
+
+function renderEventList() {
+  const { upcoming, past } = splitEvents(events);
+  const summary = memberSummary(records, past);
+  const card = (e) => {
+    const hc = headcount(records, e.id);
+    return `
+      <button class="event-card" data-open="${esc(e.id)}">
+        <div class="event-body">
+          <div class="event-title">${esc(e.title)}</div>
+          <div class="event-meta">${esc(fmtEventDate(e.event_date, e.start_time))}${e.location ? ` · ${esc(e.location)}` : ""}</div>
+        </div>
+        ${hc.marked ? `<span class="pill green">${hc.present + hc.late}/${hc.marked} showed</span>` : `<span class="pill">Not taken</span>`}
+      </button>`;
+  };
+  return `
+    <div class="topbar">
+      <div>
+        <h1>✅ Attendance</h1>
+        <p class="muted tiny">Take the roll in seconds; spot who's drifting.</p>
+      </div>
+      ${canManage() ? `<button class="btn" data-add-event>+ Event</button>` : ""}
+    </div>
+    ${error ? `<div class="error">${esc(error)}</div>` : ""}
+    ${upcoming.length ? `<div class="section-head"><h2>Upcoming</h2></div><div class="stack">${upcoming.map(card).join("")}</div>` : ""}
+    ${past.length ? `<div class="section-head"><h2>Past</h2></div><div class="stack">${past.slice(0, 20).map(card).join("")}</div>` : ""}
+    ${!events.length ? `<div class="card empty">No events yet${canManage() ? " — add your first meeting" : ""}.</div>` : ""}
+    ${summary.length ? `
+      <div class="section-head"><h2>Attendance rates</h2><span class="tiny muted">past events</span></div>
+      <div class="stack">
+        ${summary.map((s) => `
+          <div class="summary-row">
+            <span class="summary-name">${esc(memberName(s.member_id))}</span>
+            <div class="bar"><span style="width:${s.rate}%"></span></div>
+            <span class="rate">${s.rate}% <span class="muted tiny">(${s.attended}/${s.marked})</span></span>
+          </div>`).join("")}
+      </div>` : ""}
+  `;
+}
+
+function renderEvent(event) {
+  const marks = recordsByMember(records, event.id);
+  const hc = headcount(records, event.id);
+  return `
+    <button class="back" data-back>← All events</button>
+    <div class="topbar">
+      <div>
+        <h1>${esc(event.title)}</h1>
+        <p class="muted tiny">${esc(fmtEventDate(event.event_date, event.start_time))}${event.location ? ` · ${esc(event.location)}` : ""}${hc.marked ? ` · ${hc.present + hc.late} of ${hc.marked} marked showed up` : ""}</p>
+      </div>
+      ${canManage() ? `<button class="btn btn-ghost btn-sm" data-edit-event="${esc(event.id)}">Edit</button>` : ""}
+    </div>
+    ${error ? `<div class="error">${esc(error)}</div>` : ""}
+    ${canManage() ? `<p class="tiny muted" style="margin:0 2px 8px">Tap a status to cycle: present → late → excused → absent.</p>` : ""}
+    <div class="stack">
+      ${members.map((m) => {
+        const rec = marks.get(m.id);
+        const meta = rec ? statusMeta(rec.status) : null;
+        return `
+          <div class="roster-row">
+            <span class="roster-name">${esc(m.name)}</span>
+            ${canManage()
+              ? `<button class="status-btn ${rec ? esc(rec.status) : ""}" data-cycle="${esc(m.id)}">${meta ? `${meta.icon} ${esc(meta.label)}` : "— tap to mark"}</button>`
+              : `<span class="status-chip">${meta ? `${meta.icon} ${esc(meta.label)}` : "—"}</span>`}
+          </div>`;
+      }).join("")}
+    </div>
+  `;
+}
+
+function render() {
+  const root = document.getElementById("root");
+  root.className = "app-root";
+  const event = openEventId ? events.find((e) => e.id === openEventId) : null;
+  root.innerHTML = event ? renderEvent(event) : renderEventList();
+}
+
+/* ── Modal ─────────────────────────────────────────────────────────────────── */
+function openModal(html) {
+  closeModal();
+  modalEl = document.createElement("div");
+  modalEl.className = "overlay";
+  modalEl.innerHTML = `<div class="modal">${html}</div>`;
+  modalEl.addEventListener("click", (e) => { if (e.target === modalEl) closeModal(); });
+  document.body.appendChild(modalEl);
+}
+function closeModal() { modalEl?.remove(); modalEl = null; }
+
+function openEventEditor(existing) {
+  const ev = existing ?? null;
+  const kinds = ["meeting", "practice", "service", "other"];
+  openModal(`
+    <h2>${ev ? "Edit event" : "New event"}</h2>
+    <form class="form" id="event-form">
+      <div class="field"><label for="e-title">Title</label><input id="e-title" data-autofocus value="${esc(ev?.title ?? "")}" placeholder="July pack meeting" required /></div>
+      <div class="grid2">
+        <div class="field"><label for="e-date">Date</label><input id="e-date" type="date" value="${esc(ev?.event_date ?? "")}" required /></div>
+        <div class="field"><label for="e-time">Time</label><input id="e-time" type="time" value="${esc(ev?.start_time ?? "")}" /></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="e-kind">Type</label>
+          <select id="e-kind">${kinds.map((k) => `<option value="${k}" ${(ev?.kind ?? "meeting") === k ? "selected" : ""}>${k[0].toUpperCase()}${k.slice(1)}</option>`).join("")}</select>
+        </div>
+        <div class="field"><label for="e-location">Location</label><input id="e-location" value="${esc(ev?.location ?? "")}" /></div>
+      </div>
+      <div class="field"><label for="e-notes">Notes</label><textarea id="e-notes">${esc(ev?.notes ?? "")}</textarea></div>
+      <div class="modal-actions">
+        ${ev ? `<button type="button" class="btn btn-danger modal-left" data-delete-event="${esc(ev.id)}">Delete</button>` : ""}
+        <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+        <button type="submit" class="btn">${ev ? "Save" : "Add"}</button>
+      </div>
+    </form>`);
+  modalEl.querySelector("[data-autofocus]")?.focus();
+  modalEl.querySelector("#event-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const title = document.getElementById("e-title").value.trim();
+    const date = document.getElementById("e-date").value;
+    if (!title) { document.getElementById("e-title").focus(); return; }
+    if (!date) { document.getElementById("e-date").focus(); return; }
+    const btn = modalEl?.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+    saveEvent({
+      title,
+      kind: document.getElementById("e-kind").value,
+      event_date: date,
+      start_time: document.getElementById("e-time").value,
+      location: document.getElementById("e-location").value.trim(),
+      notes: document.getElementById("e-notes").value.trim(),
+    }, ev?.id ?? null).catch((err) => showError(err.message));
+  });
+}
+
+/* ── Events ────────────────────────────────────────────────────────────────── */
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  if (t.hasAttribute("data-open")) { openEventId = t.getAttribute("data-open"); render(); return; }
+  if (t.hasAttribute("data-back")) { openEventId = null; render(); return; }
+  if (t.hasAttribute("data-cancel")) { closeModal(); return; }
+  if (t.hasAttribute("data-add-event")) { openEventEditor(null); return; }
+  if (t.hasAttribute("data-edit-event")) { openEventEditor(events.find((x) => x.id === t.getAttribute("data-edit-event"))); return; }
+  if (t.hasAttribute("data-delete-event")) { deleteEvent(t.getAttribute("data-delete-event")); return; }
+  if (t.hasAttribute("data-cycle") && openEventId) { cycleStatus(openEventId, t.getAttribute("data-cycle")).catch((err) => showError(err.message)); return; }
+});
+
+refresh();
+</script>
+</body>
+</html>

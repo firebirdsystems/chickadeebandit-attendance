@@ -1,0 +1,38 @@
+{
+  "id": "attendance",
+  "name": "Attendance",
+  "version": "1.0.0",
+  "description": "Meeting and practice attendance for clubs and troops — take the roll in seconds, see who's been showing up, and spot members who are drifting away.",
+  "entrypoint": "index.html",
+  "runtime": "static",
+  "category": "organization",
+  "tags": ["attendance", "club", "meetings", "roll-call", "members"],
+  "icon": "✅",
+  "data_access": {
+    "reads": ["family.members"],
+    "writes": []
+  },
+  "permissions": {
+    "default_audience": "everyone",
+    "requires_approval": false
+  },
+  "storage": "db",
+  "db_plaintext_columns": ["event_date", "start_time"],
+  "row_policies": {
+    "events": {
+      "kind": "adult_writable"
+    },
+    "records": {
+      "kind": "adult_writable"
+    }
+  },
+  "nav": { "label": "Attendance" },
+  "resource_limits": {
+    "max_db_bytes": 52428800
+  },
+  "ai_access": {
+    "allowed": true,
+    "mode": "read",
+    "db_exports": ["events", "records"]
+  }
+}
