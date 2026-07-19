@@ -2,9 +2,20 @@ import { describe, it, expect } from "vitest";
 import {
   statusMeta, nextStatus, daysUntilDate, splitEvents, recordsByMember,
   isAttended, memberSummary, headcount,
+  occurrencesForSeries, seriesLabel, formatTime12, WEEKDAYS,
 } from "../src/logic.js";
 
 const FROM = new Date(2026, 6, 12, 9, 0, 0); // July 12, 2026 local
+
+/** ISO date `n` days from `iso` — mirrors the app's noon-anchored arithmetic. */
+function plusDays(iso, n) {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function weekdayOf(iso) {
+  return new Date(`${iso}T12:00:00`).getDay();
+}
 
 describe("nextStatus cycle", () => {
   it("cycles unmarked → present → late → excused → absent → present", () => {
@@ -63,6 +74,65 @@ describe("headcount / recordsByMember", () => {
     const map = recordsByMember(records, "e1");
     expect(map.get("a")?.status).toBe("present");
     expect(map.has("c")).toBe(false);
+  });
+});
+
+describe("occurrencesForSeries", () => {
+  const START = "2026-07-07";
+  const startDow = weekdayOf(START);
+
+  it("emits weekly occurrences when start_date is already on the weekday", () => {
+    const s = { weekday: startDow, interval_weeks: 1, start_date: START };
+    expect(occurrencesForSeries(s, START, plusDays(START, 14)))
+      .toEqual([START, plusDays(START, 7), plusDays(START, 14)]);
+  });
+
+  it("snaps the first occurrence forward to the chosen weekday", () => {
+    const s = { weekday: (startDow + 2) % 7, interval_weeks: 1, start_date: START };
+    const first = occurrencesForSeries(s, START, plusDays(START, 6))[0];
+    expect(first).toBe(plusDays(START, 2));
+  });
+
+  it("phase-locks 'every 2 weeks' to start_date, not to the window", () => {
+    const s = { weekday: startDow, interval_weeks: 2, start_date: START };
+    // Window opens one week in — the off week must be skipped, next is +14.
+    const from = plusDays(START, 7);
+    expect(occurrencesForSeries(s, from, plusDays(START, 21)))
+      .toEqual([plusDays(START, 14)]);
+  });
+
+  it("respects end_date and window bounds (inclusive)", () => {
+    const s = { weekday: startDow, interval_weeks: 1, start_date: START, end_date: plusDays(START, 7) };
+    expect(occurrencesForSeries(s, START, plusDays(START, 60)))
+      .toEqual([START, plusDays(START, 7)]);
+  });
+
+  it("formats dates correctly across a year rollover", () => {
+    const start = "2026-12-29";
+    const s = { weekday: weekdayOf(start), interval_weeks: 1, start_date: start };
+    expect(occurrencesForSeries(s, start, "2027-01-19"))
+      .toEqual(["2026-12-29", "2027-01-05", "2027-01-12", "2027-01-19"]);
+  });
+
+  it("returns [] for invalid input", () => {
+    expect(occurrencesForSeries(null, START, START)).toEqual([]);
+    expect(occurrencesForSeries({ weekday: 9, interval_weeks: 1, start_date: START }, START, START)).toEqual([]);
+    expect(occurrencesForSeries({ weekday: 0, interval_weeks: 1, start_date: "" }, START, START)).toEqual([]);
+  });
+});
+
+describe("seriesLabel / formatTime12", () => {
+  it("labels weekly and every-N series", () => {
+    expect(seriesLabel({ weekday: 2, interval_weeks: 1, start_time: "18:00" })).toBe("Weekly · Tuesday · 6:00 PM");
+    expect(seriesLabel({ weekday: 4, interval_weeks: 2, start_time: "" })).toBe("Every 2 weeks · Thursday");
+    expect(WEEKDAYS[2].label).toBe("Tuesday");
+  });
+  it("formats 24h times to 12h", () => {
+    expect(formatTime12("18:00")).toBe("6:00 PM");
+    expect(formatTime12("09:00")).toBe("9:00 AM");
+    expect(formatTime12("00:30")).toBe("12:30 AM");
+    expect(formatTime12("12:00")).toBe("12:00 PM");
+    expect(formatTime12("")).toBe("");
   });
 });
 

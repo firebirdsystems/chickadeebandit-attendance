@@ -20,9 +20,24 @@ describe("manifest.json", () => {
   it("version follows semver", () => expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/));
   it("has a nav label", () => expect(manifest.nav?.label).toBeTruthy());
 
-  it("both tables are adult_writable (leaders mark, everyone views)", () => {
+  it("all tables are adult_writable (leaders mark, everyone views)", () => {
     expect(manifest.row_policies?.events?.kind).toBe("adult_writable");
     expect(manifest.row_policies?.records?.kind).toBe("adult_writable");
+    expect(manifest.row_policies?.series?.kind).toBe("adult_writable");
+  });
+
+  it("exposes an agenda source filtered on :today, read-open for the Today merge", () => {
+    const q = manifest.agenda?.source?.query ?? "";
+    expect(manifest.agenda?.kind).toBe("event");
+    expect(q).toMatch(/:today/);
+    expect(q).toMatch(/\bwhen_at\b/);
+    expect(q).toMatch(/\btitle\b/);
+  });
+
+  it("exposes a glance stat that hides when there are no sessions", () => {
+    expect(manifest.glance?.display?.template).toBe("stat");
+    expect(manifest.glance?.display?.empty_hides).toBe(true);
+    expect(manifest.glance?.source?.query ?? "").toMatch(/:today/);
   });
 
   it("SQL-sorted schedule columns are declared plaintext", () => {

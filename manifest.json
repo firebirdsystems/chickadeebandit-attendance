@@ -1,7 +1,7 @@
 {
   "id": "attendance",
   "name": "Attendance",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Meeting and practice attendance for clubs and troops — take the roll in seconds, see who's been showing up, and spot members who are drifting away.",
   "entrypoint": "index.html",
   "runtime": "static",
@@ -24,6 +24,29 @@
     },
     "records": {
       "kind": "adult_writable"
+    },
+    "series": {
+      "kind": "adult_writable"
+    }
+  },
+  "agenda": {
+    "kind": "event",
+    "label": "Attendance",
+    "source": {
+      "kind": "sql",
+      "query": "SELECT id AS id, title AS title, CASE WHEN start_time <> '' THEN (event_date || 'T' || start_time) ELSE event_date END AS when_at, NULLIF(location, '') AS subtitle FROM app_attendance__events WHERE event_date = :today ORDER BY start_time LIMIT 10"
+    }
+  },
+  "glance": {
+    "source": {
+      "kind": "sql",
+      "query": "SELECT COUNT(*) AS value FROM app_attendance__events WHERE event_date >= :today AND event_date <= date(:today, '+6 days') LIMIT 1"
+    },
+    "display": {
+      "template": "stat",
+      "value": "value",
+      "label": "sessions this week",
+      "empty_hides": true
     }
   },
   "nav": { "label": "Attendance" },

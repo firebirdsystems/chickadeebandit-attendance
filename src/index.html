@@ -114,7 +114,7 @@
 import { esc, isAdult, hubConfirm } from "/hub-sdk.js";
 import {
   STATUSES, statusMeta, nextStatus, splitEvents, recordsByMember,
-  memberSummary, headcount,
+  memberSummary, headcount, WEEKDAYS, occurrencesForSeries, seriesLabel,
 } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
@@ -126,11 +126,22 @@ let memberMap = new Map();
 let me = null;
 let events = [];
 let records = [];
+let series = [];
 let openEventId = null;
 let error = "";
 let modalEl = null;
 
 function nowIso() { return new Date().toISOString(); }
+/** Household-local today as ISO YYYY-MM-DD. */
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function addDaysIso(iso, n) {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function canManage() { return !!me && isAdult(me); }
 function memberName(id) { return memberMap.get(id)?.name ?? "Former member"; }
 
@@ -177,14 +188,19 @@ async function loadData() {
       { id: "r2", event_id: "e1", member_id: "demo-3", status: "absent", note: "", recorded_by: "demo-1", created_at: nowIso() },
       { id: "r3", event_id: "e1", member_id: "demo-4", status: "late", note: "", recorded_by: "demo-1", created_at: nowIso() },
     ];
+    series = [
+      { id: "s1", title: "Tuesday practice", kind: "practice", weekday: 2, interval_weeks: 1, start_time: "18:00", location: "Field", notes: "", start_date: "2026-07-01", end_date: "", active: 1, created_by: "demo-1", created_at: nowIso() },
+    ];
     return;
   }
-  const [e, r] = await Promise.all([
-    db("SELECT id, title, kind, event_date, start_time, location, notes, created_by, created_at FROM app_attendance__events ORDER BY event_date DESC LIMIT 300"),
+  const [e, r, s] = await Promise.all([
+    db("SELECT id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at FROM app_attendance__events ORDER BY event_date DESC LIMIT 300"),
     db("SELECT id, event_id, member_id, status, note, recorded_by, created_at FROM app_attendance__records LIMIT 3000"),
+    db("SELECT id, title, kind, weekday, interval_weeks, start_time, location, notes, start_date, end_date, active, created_by, created_at FROM app_attendance__series ORDER BY created_at DESC LIMIT 100"),
   ]);
   events = e.rows ?? [];
   records = r.rows ?? [];
+  series = s.rows ?? [];
 }
 
 async function refresh() {
@@ -193,6 +209,7 @@ async function refresh() {
     await Promise.all([loadMembers(), loadData()]);
     if (openEventId && !events.some((e) => e.id === openEventId)) openEventId = null;
     render();
+    await ensureSeriesEvents();
   } catch (e) { error = e.message; render(); }
 }
 
@@ -262,6 +279,97 @@ async function cycleStatus(eventId, memberId) {
   } catch (e) { records = records.filter((r) => r.id !== row.id); showError(e.message); }
 }
 
+/* ── Recurring series ──────────────────────────────────────────────────────── */
+
+/**
+ * Stamp out real event rows for every active series across the next 28 days,
+ * skipping dates already materialized. Idempotent both locally (the `have` set)
+ * and in the DB (INSERT OR IGNORE against the UNIQUE (series_id, event_date)
+ * index). Adults only — events are adult_writable, so a member insert would 403.
+ */
+async function ensureSeriesEvents() {
+  if (!DB || !canManage()) return;
+  const active = series.filter((s) => Number(s.active) === 1);
+  if (!active.length) return;
+  const from = todayIso();
+  const to = addDaysIso(from, 28);
+  const have = new Set(events.filter((e) => e.series_id).map((e) => `${e.series_id} ${e.event_date}`));
+  const toInsert = [];
+  for (const s of active) {
+    for (const date of occurrencesForSeries(s, from, to)) {
+      const key = `${s.id} ${date}`;
+      if (have.has(key)) continue;
+      have.add(key);
+      toInsert.push({
+        id: crypto.randomUUID(), title: s.title, kind: s.kind, event_date: date,
+        start_time: s.start_time, location: s.location, notes: s.notes,
+        series_id: s.id, created_by: me.id, created_at: nowIso(),
+      });
+    }
+  }
+  if (!toInsert.length) return;
+  for (const row of toInsert) {
+    try {
+      await db("INSERT OR IGNORE INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        [row.id, row.title, row.kind, row.event_date, row.start_time, row.location, row.notes, row.series_id, row.created_by, row.created_at]);
+      events.push(row);
+    } catch (e) { showError(e.message); }
+  }
+  render();
+}
+
+/** Drop a series' future, still-unmarked events, then re-stamp from the new rule. */
+async function restampSeries(seriesId) {
+  const today = todayIso();
+  await db("DELETE FROM app_attendance__events WHERE series_id = ? AND event_date >= ? AND id NOT IN (SELECT DISTINCT event_id FROM app_attendance__records)",
+    [seriesId, today]);
+  const marked = new Set(records.map((r) => r.event_id));
+  events = events.filter((e) => !(e.series_id === seriesId && e.event_date >= today && !marked.has(e.id)));
+  await ensureSeriesEvents();
+  render();
+}
+
+async function saveSeries(fields, existingId) {
+  const now = nowIso();
+  if (existingId) {
+    const idx = series.findIndex((s) => s.id === existingId);
+    const prev = idx !== -1 ? series[idx] : null;
+    if (idx !== -1) series[idx] = { ...series[idx], ...fields };
+    closeModal(); render();
+    try {
+      await db("UPDATE app_attendance__series SET title=?, kind=?, weekday=?, interval_weeks=?, start_time=?, location=?, notes=?, start_date=?, end_date=? WHERE id=?",
+        [fields.title, fields.kind, fields.weekday, fields.interval_weeks, fields.start_time, fields.location, fields.notes, fields.start_date, fields.end_date, existingId]);
+      await restampSeries(existingId);
+    } catch (e) { if (idx !== -1 && prev) series[idx] = prev; showError(e.message); }
+  } else {
+    const row = { id: crypto.randomUUID(), ...fields, active: 1, created_by: me.id, created_at: now };
+    series = [row, ...series];
+    closeModal(); render();
+    try {
+      await db("INSERT INTO app_attendance__series (id, title, kind, weekday, interval_weeks, start_time, location, notes, start_date, end_date, active, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [row.id, row.title, row.kind, row.weekday, row.interval_weeks, row.start_time, row.location, row.notes, row.start_date, row.end_date, row.active, row.created_by, row.created_at]);
+      await ensureSeriesEvents();
+    } catch (e) { series = series.filter((x) => x.id !== row.id); showError(e.message); }
+  }
+}
+
+async function deactivateSeries(id) {
+  const ok = await hubConfirm({ message: "Stop this recurring series?", description: "Upcoming unmarked sessions are removed; past and already-marked ones stay.", confirmLabel: "Stop series", destructive: true });
+  if (!ok) return;
+  const idx = series.findIndex((s) => s.id === id);
+  const prev = idx !== -1 ? { ...series[idx] } : null;
+  if (idx !== -1) series[idx].active = 0;
+  closeModal(); render();
+  try {
+    await db("UPDATE app_attendance__series SET active = 0 WHERE id = ?", [id]);
+    const today = todayIso();
+    await db("DELETE FROM app_attendance__events WHERE series_id = ? AND event_date >= ? AND id NOT IN (SELECT DISTINCT event_id FROM app_attendance__records)", [id, today]);
+    const marked = new Set(records.map((r) => r.event_id));
+    events = events.filter((e) => !(e.series_id === id && e.event_date >= today && !marked.has(e.id)));
+    render();
+  } catch (e) { if (idx !== -1 && prev) series[idx] = prev; showError(e.message); }
+}
+
 /* ── Rendering ─────────────────────────────────────────────────────────────── */
 function fmtEventDate(iso, time) {
   const d = new Date(`${iso}T12:00:00`);
@@ -282,7 +390,7 @@ function renderEventList() {
     return `
       <button class="event-card" data-open="${esc(e.id)}">
         <div class="event-body">
-          <div class="event-title">${esc(e.title)}</div>
+          <div class="event-title">${esc(e.title)}${e.series_id ? ` <span class="muted" title="Recurring">↻</span>` : ""}</div>
           <div class="event-meta">${esc(fmtEventDate(e.event_date, e.start_time))}${e.location ? ` · ${esc(e.location)}` : ""}</div>
         </div>
         ${hc.marked ? `<span class="pill green">${hc.present + hc.late}/${hc.marked} showed</span>` : `<span class="pill">Not taken</span>`}
@@ -297,6 +405,7 @@ function renderEventList() {
       ${canManage() ? `<button class="btn" data-add-event>+ Event</button>` : ""}
     </div>
     ${error ? `<div class="error">${esc(error)}</div>` : ""}
+    ${canManage() ? renderSeriesSection() : ""}
     ${upcoming.length ? `<div class="section-head"><h2>Upcoming</h2></div><div class="stack">${upcoming.map(card).join("")}</div>` : ""}
     ${past.length ? `<div class="section-head"><h2>Past</h2></div><div class="stack">${past.slice(0, 20).map(card).join("")}</div>` : ""}
     ${!events.length ? `<div class="card empty">No events yet${canManage() ? " — add your first meeting" : ""}.</div>` : ""}
@@ -310,6 +419,22 @@ function renderEventList() {
             <span class="rate">${s.rate}% <span class="muted tiny">(${s.attended}/${s.marked})</span></span>
           </div>`).join("")}
       </div>` : ""}
+  `;
+}
+
+function renderSeriesSection() {
+  const active = series.filter((s) => Number(s.active) === 1);
+  return `
+    <div class="section-head"><h2>Recurring</h2><button class="btn btn-ghost btn-sm" data-add-series>+ Series</button></div>
+    ${active.length ? `<div class="stack">${active.map((s) => `
+      <button class="event-card" data-edit-series="${esc(s.id)}">
+        <div class="event-body">
+          <div class="event-title">↻ ${esc(s.title)}</div>
+          <div class="event-meta">${esc(seriesLabel(s))}${s.location ? ` · ${esc(s.location)}` : ""}</div>
+        </div>
+        <span class="pill">Series</span>
+      </button>`).join("")}</div>`
+      : `<div class="card empty tiny">No recurring series — add one to auto-schedule practices onto the calendar and Today view.</div>`}
   `;
 }
 
@@ -405,6 +530,61 @@ function openEventEditor(existing) {
   });
 }
 
+function openSeriesEditor(existing) {
+  const s = existing ?? null;
+  const kinds = ["meeting", "practice", "service", "other"];
+  openModal(`
+    <h2>${s ? "Edit series" : "New recurring series"}</h2>
+    <form class="form" id="series-form">
+      <div class="field"><label for="s-title">Title</label><input id="s-title" data-autofocus value="${esc(s?.title ?? "")}" placeholder="Tuesday practice" required /></div>
+      <div class="grid2">
+        <div class="field"><label for="s-weekday">Day</label>
+          <select id="s-weekday">${WEEKDAYS.map((w) => `<option value="${w.value}" ${Number(s?.weekday ?? 2) === w.value ? "selected" : ""}>${w.label}</option>`).join("")}</select>
+        </div>
+        <div class="field"><label for="s-time">Time</label><input id="s-time" type="time" value="${esc(s?.start_time ?? "")}" /></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="s-kind">Type</label>
+          <select id="s-kind">${kinds.map((k) => `<option value="${k}" ${(s?.kind ?? "practice") === k ? "selected" : ""}>${k[0].toUpperCase()}${k.slice(1)}</option>`).join("")}</select>
+        </div>
+        <div class="field"><label for="s-interval">Repeat</label>
+          <select id="s-interval">${[1, 2, 3, 4].map((n) => `<option value="${n}" ${Number(s?.interval_weeks ?? 1) === n ? "selected" : ""}>${n === 1 ? "Every week" : `Every ${n} weeks`}</option>`).join("")}</select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="s-start">Starts</label><input id="s-start" type="date" value="${esc(s?.start_date ?? todayIso())}" required /></div>
+        <div class="field"><label for="s-end">Ends (optional)</label><input id="s-end" type="date" value="${esc(s?.end_date ?? "")}" /></div>
+      </div>
+      <div class="field"><label for="s-location">Location</label><input id="s-location" value="${esc(s?.location ?? "")}" /></div>
+      <div class="modal-actions">
+        ${s ? `<button type="button" class="btn btn-danger modal-left" data-deactivate-series="${esc(s.id)}">Stop</button>` : ""}
+        <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+        <button type="submit" class="btn">${s ? "Save" : "Add"}</button>
+      </div>
+    </form>`);
+  modalEl.querySelector("[data-autofocus]")?.focus();
+  modalEl.querySelector("#series-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const title = document.getElementById("s-title").value.trim();
+    const start_date = document.getElementById("s-start").value;
+    if (!title) { document.getElementById("s-title").focus(); return; }
+    if (!start_date) { document.getElementById("s-start").focus(); return; }
+    const btn = modalEl?.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+    saveSeries({
+      title,
+      kind: document.getElementById("s-kind").value,
+      weekday: Number(document.getElementById("s-weekday").value),
+      interval_weeks: Number(document.getElementById("s-interval").value),
+      start_time: document.getElementById("s-time").value,
+      location: document.getElementById("s-location").value.trim(),
+      notes: s?.notes ?? "",
+      start_date,
+      end_date: document.getElementById("s-end").value,
+    }, s?.id ?? null).catch((err) => showError(err.message));
+  });
+}
+
 /* ── Events ────────────────────────────────────────────────────────────────── */
 document.addEventListener("click", (e) => {
   const t = e.target.closest("button");
@@ -415,6 +595,9 @@ document.addEventListener("click", (e) => {
   if (t.hasAttribute("data-add-event")) { openEventEditor(null); return; }
   if (t.hasAttribute("data-edit-event")) { openEventEditor(events.find((x) => x.id === t.getAttribute("data-edit-event"))); return; }
   if (t.hasAttribute("data-delete-event")) { deleteEvent(t.getAttribute("data-delete-event")); return; }
+  if (t.hasAttribute("data-add-series")) { openSeriesEditor(null); return; }
+  if (t.hasAttribute("data-edit-series")) { openSeriesEditor(series.find((x) => x.id === t.getAttribute("data-edit-series"))); return; }
+  if (t.hasAttribute("data-deactivate-series")) { deactivateSeries(t.getAttribute("data-deactivate-series")); return; }
   if (t.hasAttribute("data-cycle") && openEventId) { cycleStatus(openEventId, t.getAttribute("data-cycle")).catch((err) => showError(err.message)); return; }
 });
 

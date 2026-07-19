@@ -1,0 +1,66 @@
+{
+  "scenarios": [
+    {
+      "name": "leaders manage series & roll; the occurrence index dedupes stamped sessions",
+      "members": { "leader": "adult", "kid": "child" },
+      "steps": [
+        {
+          "action": "db",
+          "as": "leader",
+          "sql": "INSERT INTO app_attendance__series (id, title, kind, weekday, interval_weeks, start_time, location, notes, start_date, end_date, active, created_by, created_at) VALUES ('ser1', 'Tuesday practice', 'practice', 2, 1, '18:00', 'Field', '', '2026-08-04', '', 1, ?, '2026-08-01T00:00:00Z')",
+          "params": ["{{leader}}"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "INSERT INTO app_attendance__series (id, title, kind, weekday, interval_weeks, start_time, location, notes, start_date, end_date, active, created_by, created_at) VALUES ('ser2', 'Sneaky series', 'practice', 3, 1, '', '', '', '2026-08-05', '', 1, ?, '2026-08-01T00:00:00Z')",
+          "params": ["{{kid}}"],
+          "expect": { "status": 403 }
+        },
+        {
+          "action": "db",
+          "as": "leader",
+          "sql": "INSERT OR IGNORE INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at) VALUES ('ev1', 'Tuesday practice', 'practice', '2026-08-04', '18:00', 'Field', '', 'ser1', ?, '2026-08-01T00:00:00Z')",
+          "params": ["{{leader}}"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "leader",
+          "sql": "INSERT OR IGNORE INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at) VALUES ('ev1-dup', 'Tuesday practice', 'practice', '2026-08-04', '18:00', 'Field', '', 'ser1', ?, '2026-08-01T00:00:00Z')",
+          "params": ["{{leader}}"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "leader",
+          "sql": "SELECT id FROM app_attendance__events WHERE series_id = 'ser1'",
+          "params": [],
+          "expect": { "status": 200, "rowCount": 1 }
+        },
+        {
+          "action": "db",
+          "as": "leader",
+          "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, note, recorded_by, created_at) VALUES ('rec1', 'ev1', ?, 'present', '', ?, '2026-08-04T18:05:00Z') ON CONFLICT (event_id, member_id) DO UPDATE SET status = excluded.status, recorded_by = excluded.recorded_by",
+          "params": ["{{kid}}", "{{leader}}"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "leader",
+          "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, note, recorded_by, created_at) VALUES ('rec2', 'ev1', ?, 'late', '', ?, '2026-08-04T18:20:00Z') ON CONFLICT (event_id, member_id) DO UPDATE SET status = excluded.status, recorded_by = excluded.recorded_by",
+          "params": ["{{kid}}", "{{leader}}"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "SELECT status FROM app_attendance__records WHERE event_id = 'ev1'",
+          "params": [],
+          "expect": { "status": 200, "rowCount": 1 }
+        }
+      ]
+    }
+  ]
+}

@@ -92,3 +92,88 @@ export function headcount(records, eventId) {
   }
   return out;
 }
+
+/* ── Recurring series ─────────────────────────────────────────────────────── */
+
+/** Weekday options for the series form; value matches JS Date.getDay() (0=Sun). */
+export const WEEKDAYS = [
+  { value: 0, label: "Sunday",    short: "Sun" },
+  { value: 1, label: "Monday",    short: "Mon" },
+  { value: 2, label: "Tuesday",   short: "Tue" },
+  { value: 3, label: "Wednesday", short: "Wed" },
+  { value: 4, label: "Thursday",  short: "Thu" },
+  { value: 5, label: "Friday",    short: "Fri" },
+  { value: 6, label: "Saturday",  short: "Sat" },
+];
+
+function isoToNoon(iso) {
+  if (!iso) return null;
+  const d = new Date(`${iso}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function noonToIso(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** A new noon Date `n` days from `d`, rebuilt from components so DST can't drift it. */
+function addDays(d, n) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, 12, 0, 0, 0);
+}
+
+/** "6:00 PM" from "18:00"; "" if unparseable/empty. */
+export function formatTime12(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm ?? "");
+  if (!m) return "";
+  const h = Number(m[1]);
+  return `${h % 12 === 0 ? 12 : h % 12}:${m[2]} ${h < 12 ? "AM" : "PM"}`;
+}
+
+/** Human summary of a series rule, e.g. "Every 2 weeks · Tuesday · 6:00 PM". */
+export function seriesLabel(series) {
+  const wd = WEEKDAYS.find((w) => w.value === Number(series.weekday))?.label ?? "";
+  const n = Math.max(1, Number(series.interval_weeks) || 1);
+  const cadence = n === 1 ? "Weekly" : `Every ${n} weeks`;
+  const time = series.start_time ? ` · ${formatTime12(series.start_time)}` : "";
+  return `${cadence} · ${wd}${time}`;
+}
+
+/**
+ * ISO dates a weekly series lands on within [fromIso, toIso] (inclusive).
+ * Occurrences are phase-locked to `start_date` (so "every 2 weeks" keeps the
+ * same alternating weeks no matter the window), stepping interval_weeks*7 days
+ * from the first matching weekday on/after start_date, capped at end_date.
+ */
+export function occurrencesForSeries(series, fromIso, toIso) {
+  const out = [];
+  if (!series) return out;
+  const weekday = Number(series.weekday);
+  if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) return out;
+  const start = isoToNoon(series.start_date);
+  const from = isoToNoon(fromIso);
+  const to = isoToNoon(toIso);
+  if (start == null || from == null || to == null) return out;
+
+  const interval = Math.max(1, Math.trunc(Number(series.interval_weeks) || 1));
+  const stepDays = interval * 7;
+  const end = series.end_date ? isoToNoon(series.end_date) : null;
+  const hardEnd = end != null && end < to ? end : to;
+
+  // Phase anchor: first date on/after start_date whose weekday matches.
+  const anchor = addDays(start, (weekday - start.getDay() + 7) % 7);
+
+  // Jump straight to the first occurrence >= from (start may be far in the past).
+  let cur = anchor;
+  if (cur < from) {
+    const dayGap = Math.round((from - cur) / 86400000);
+    cur = addDays(cur, Math.ceil(dayGap / stepDays) * stepDays);
+  }
+  for (let guard = 0; cur <= hardEnd && guard < 500; guard++) {
+    if (cur >= from) out.push(noonToIso(cur));
+    cur = addDays(cur, stepDays);
+  }
+  return out;
+}
