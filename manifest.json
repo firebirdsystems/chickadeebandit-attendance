@@ -7,6 +7,7 @@
   "runtime": "static",
   "category": "organization",
   "tags": ["attendance", "club", "meetings", "roll-call", "members"],
+  "contexts": ["household", "shared_space", "shared_space.roster"],
   "icon": "✅",
   "data_access": {
     "reads": ["family.members"],
@@ -20,13 +21,16 @@
   "db_plaintext_columns": ["event_date", "start_time"],
   "row_policies": {
     "events": {
-      "kind": "adult_writable"
+      "kind": "adult_writable",
+      "steward_writes_only": true
     },
     "records": {
-      "kind": "adult_writable"
+      "kind": "adult_writable",
+      "steward_writes_only": true
     },
     "series": {
-      "kind": "adult_writable"
+      "kind": "adult_writable",
+      "steward_writes_only": true
     }
   },
   "agenda": {
