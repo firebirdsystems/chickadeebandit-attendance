@@ -1,16 +1,28 @@
 {
   "id": "attendance",
   "name": "Attendance",
-  "version": "1.1.0",
-  "description": "Meeting and practice attendance for clubs and troops — take the roll in seconds, see who's been showing up, and spot members who are drifting away.",
+  "version": "1.1.1",
+  "description": "Meeting and practice attendance for clubs and troops \u2014 take the roll in seconds, see who's been showing up, and spot members who are drifting away.",
   "entrypoint": "index.html",
   "runtime": "static",
   "category": "organization",
-  "tags": ["attendance", "club", "meetings", "roll-call", "members"],
-  "contexts": ["household", "shared_space", "shared_space.roster"],
-  "icon": "✅",
+  "tags": [
+    "attendance",
+    "club",
+    "meetings",
+    "roll-call",
+    "members"
+  ],
+  "contexts": [
+    "household",
+    "shared_space",
+    "shared_space.roster"
+  ],
+  "icon": "\u2705",
   "data_access": {
-    "reads": ["family.members"],
+    "reads": [
+      "family.members"
+    ],
     "writes": []
   },
   "permissions": {
@@ -18,7 +30,10 @@
     "requires_approval": false
   },
   "storage": "db",
-  "db_plaintext_columns": ["event_date", "start_time"],
+  "db_plaintext_columns": [
+    "event_date",
+    "start_time"
+  ],
   "row_policies": {
     "events": {
       "kind": "adult_writable",
@@ -26,7 +41,8 @@
     },
     "records": {
       "kind": "adult_writable",
-      "steward_writes_only": true
+      "steward_writes_only": true,
+      "member_read_column": "member_id"
     },
     "series": {
       "kind": "adult_writable",
@@ -53,13 +69,18 @@
       "empty_hides": true
     }
   },
-  "nav": { "label": "Attendance" },
+  "nav": {
+    "label": "Attendance"
+  },
   "resource_limits": {
     "max_db_bytes": 52428800
   },
   "ai_access": {
     "allowed": true,
     "mode": "read",
-    "db_exports": ["events", "records"]
+    "db_exports": [
+      "events",
+      "records"
+    ]
   }
 }

@@ -20,10 +20,18 @@ describe("manifest.json", () => {
   it("version follows semver", () => expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/));
   it("has a nav label", () => expect(manifest.nav?.label).toBeTruthy());
 
-  it("all tables are adult_writable (leaders mark, everyone views)", () => {
+  it("all tables are adult_writable (leaders mark; events/series viewable by all)", () => {
     expect(manifest.row_policies?.events?.kind).toBe("adult_writable");
     expect(manifest.row_policies?.records?.kind).toBe("adult_writable");
     expect(manifest.row_policies?.series?.kind).toBe("adult_writable");
+  });
+
+  it("per-member marks are supervisor-read-only (roster peers must not see each other's attendance)", () => {
+    // member_read_column collapses non-supervisor reads to own rows: in a
+    // household adults still see everyone (they supervise), but in a roster
+    // space only the steward does — without this, any roster member could
+    // enumerate peers and read their status/notes (medication-tracker precedent).
+    expect(manifest.row_policies?.records?.member_read_column).toBe("member_id");
   });
 
   it("exposes an agenda source filtered on :today, read-open for the Today merge", () => {
