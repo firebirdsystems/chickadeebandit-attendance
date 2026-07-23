@@ -93,6 +93,22 @@ export function headcount(records, eventId) {
   return out;
 }
 
+/**
+ * Ids of a series' future events that have no attendance record — the set that
+ * is safe to drop when a series rule changes or is stopped. "Future" means
+ * event_date >= fromIso (an ISO date string, compared lexically). An event is
+ * kept if any record references it. Pure so both the DB delete and the local
+ * state filter can share one definition (the DB delete can't express this as a
+ * subquery: the hub's row-policy rewriter rejects referencing the governed
+ * records table inside a subquery of a statement targeting events).
+ */
+export function pruneableSeriesEventIds(events, records, seriesId, fromIso) {
+  const marked = new Set(records.map((r) => r.event_id));
+  return events
+    .filter((e) => e.series_id === seriesId && String(e.event_date) >= fromIso && !marked.has(e.id))
+    .map((e) => e.id);
+}
+
 /* ── Recurring series ─────────────────────────────────────────────────────── */
 
 /** Weekday options for the series form; value matches JS Date.getDay() (0=Sun). */

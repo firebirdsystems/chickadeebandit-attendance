@@ -115,6 +115,7 @@ import { esc, isAdult, hubConfirm } from "/hub-sdk.js";
 import {
   STATUSES, statusMeta, nextStatus, splitEvents, recordsByMember,
   memberSummary, headcount, WEEKDAYS, occurrencesForSeries, seriesLabel,
+  pruneableSeriesEventIds,
 } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
@@ -321,10 +322,16 @@ async function ensureSeriesEvents() {
 /** Drop a series' future, still-unmarked events, then re-stamp from the new rule. */
 async function restampSeries(seriesId) {
   const today = todayIso();
-  await db("DELETE FROM app_attendance__events WHERE series_id = ? AND event_date >= ? AND id NOT IN (SELECT DISTINCT event_id FROM app_attendance__records)",
-    [seriesId, today]);
-  const marked = new Set(records.map((r) => r.event_id));
-  events = events.filter((e) => !(e.series_id === seriesId && e.event_date >= today && !marked.has(e.id)));
+  // The hub's row-policy rewriter rejects referencing the governed records
+  // table inside a subquery, so compute the prune set client-side and delete
+  // by explicit id list.
+  const pruneIds = pruneableSeriesEventIds(events, records, seriesId, today);
+  if (pruneIds.length) {
+    const ph = pruneIds.map(() => "?").join(",");
+    await db(`DELETE FROM app_attendance__events WHERE id IN (${ph})`, pruneIds);
+  }
+  const pruneSet = new Set(pruneIds);
+  events = events.filter((e) => !pruneSet.has(e.id));
   await ensureSeriesEvents();
   render();
 }
@@ -363,9 +370,13 @@ async function deactivateSeries(id) {
   try {
     await db("UPDATE app_attendance__series SET active = 0 WHERE id = ?", [id]);
     const today = todayIso();
-    await db("DELETE FROM app_attendance__events WHERE series_id = ? AND event_date >= ? AND id NOT IN (SELECT DISTINCT event_id FROM app_attendance__records)", [id, today]);
-    const marked = new Set(records.map((r) => r.event_id));
-    events = events.filter((e) => !(e.series_id === id && e.event_date >= today && !marked.has(e.id)));
+    const pruneIds = pruneableSeriesEventIds(events, records, id, today);
+    if (pruneIds.length) {
+      const ph = pruneIds.map(() => "?").join(",");
+      await db(`DELETE FROM app_attendance__events WHERE id IN (${ph})`, pruneIds);
+    }
+    const pruneSet = new Set(pruneIds);
+    events = events.filter((e) => !pruneSet.has(e.id));
     render();
   } catch (e) { if (idx !== -1 && prev) series[idx] = prev; showError(e.message); }
 }
