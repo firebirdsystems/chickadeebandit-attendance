@@ -69,6 +69,14 @@
       "empty_hides": true
     }
   },
+  "member_references": {
+    "events": { "column": "created_by", "on_removed": "keep" },
+    "series": { "column": "created_by", "on_removed": "keep" },
+    "records": [
+      { "column": "member_id", "on_removed": "delete" },
+      { "column": "recorded_by", "on_removed": "keep" }
+    ]
+  },
   "nav": {
     "label": "Attendance"
   },
