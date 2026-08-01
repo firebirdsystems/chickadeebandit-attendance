@@ -93,20 +93,25 @@ export function headcount(records, eventId) {
   return out;
 }
 
-/**
- * Ids of a series' future events that have no attendance record — the set that
- * is safe to drop when a series rule changes or is stopped. "Future" means
- * event_date >= fromIso (an ISO date string, compared lexically). An event is
- * kept if any record references it. Pure so both the DB delete and the local
- * state filter can share one definition (the DB delete can't express this as a
- * subquery: the hub's row-policy rewriter rejects referencing the governed
- * records table inside a subquery of a statement targeting events).
- */
-export function pruneableSeriesEventIds(events, records, seriesId, fromIso) {
-  const marked = new Set(records.map((r) => r.event_id));
-  return events
-    .filter((e) => e.series_id === seriesId && String(e.event_date) >= fromIso && !marked.has(e.id))
-    .map((e) => e.id);
+// `pruneableSeriesEventIds` lived here: it decided which of a series' future
+// events to DELETE by asking whether the PAGE'S CACHE held a record for them.
+// That cache is loaded with `LIMIT 300` on events and an UNORDERED `LIMIT 3000`
+// on records, so an event whose attendance records fell outside the truncated
+// window read as unmarked — and was deleted, taking the records that proved
+// otherwise with it. Both sides are now queried from the DB scoped to the one
+// series (see pruneSeriesFutureEvents in index.html), which is authoritative and
+// leaves nothing pure to share.
+
+/** D1 rejects a statement with more than 100 bound parameters, so every
+ *  `IN (…)` built from a variable-length id list has to be issued in slices. A
+ *  weekly series over a couple of years easily clears the ceiling. */
+export const MAX_BOUND_PARAMS = 90;
+
+/** Split a list into chunks of at most `size` (default: D1's safe parameter budget). */
+export function chunkIds(ids, size = MAX_BOUND_PARAMS) {
+  const out = [];
+  for (let i = 0; i < ids.length; i += size) out.push(ids.slice(i, i + size));
+  return out;
 }
 
 /* ── Recurring series ─────────────────────────────────────────────────────── */

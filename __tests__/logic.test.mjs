@@ -3,7 +3,7 @@ import {
   statusMeta, nextStatus, daysUntilDate, splitEvents, recordsByMember,
   isAttended, memberSummary, headcount,
   occurrencesForSeries, seriesLabel, formatTime12, WEEKDAYS,
-  pruneableSeriesEventIds,
+  chunkIds, MAX_BOUND_PARAMS,
 } from "../src/logic.js";
 
 const FROM = new Date(2026, 6, 12, 9, 0, 0); // July 12, 2026 local
@@ -142,28 +142,21 @@ describe("misc", () => {
   it("daysUntilDate handles invalid input", () => expect(daysUntilDate("", FROM)).toBeNull());
 });
 
-describe("pruneableSeriesEventIds", () => {
-  const events = [
-    { id: "e1", series_id: "s1", event_date: "2026-07-01" }, // past
-    { id: "e2", series_id: "s1", event_date: "2026-07-20" }, // future, unmarked -> prune
-    { id: "e3", series_id: "s1", event_date: "2026-07-21" }, // future, marked -> keep
-    { id: "e4", series_id: "s2", event_date: "2026-07-20" }, // other series -> ignore
-    { id: "e5", series_id: "s1", event_date: "2026-07-15" }, // == today boundary, unmarked -> prune
-  ];
-  const records = [{ event_id: "e3", member_id: "m1", status: "present" }];
+// The prune set is decided in SQL now (pruneSeriesFutureEvents), not from the
+// page's truncated caches. What stays testable is the slicing every `IN (…)`
+// over that set needs: D1 rejects a statement with more than 100 bound params.
+describe("chunkIds", () => {
+  const ids = Array.from({ length: 205 }, (_, i) => `e${i}`);
 
-  it("returns future, unmarked events for the series (today inclusive)", () => {
-    expect(pruneableSeriesEventIds(events, records, "s1", "2026-07-15").sort()).toEqual(["e2", "e5"]);
+  it("never exceeds D1's bound-parameter budget", () => {
+    const chunks = chunkIds(ids);
+    expect(chunks.every((c) => c.length <= MAX_BOUND_PARAMS)).toBe(true);
+    expect(chunks).toHaveLength(3);
   });
-  it("excludes marked future events", () => {
-    expect(pruneableSeriesEventIds(events, records, "s1", "2026-07-15")).not.toContain("e3");
+  it("preserves every id exactly once, in order", () => {
+    expect(chunkIds(ids).flat()).toEqual(ids);
   });
-  it("excludes past events and other series", () => {
-    const ids = pruneableSeriesEventIds(events, records, "s1", "2026-07-15");
-    expect(ids).not.toContain("e1");
-    expect(ids).not.toContain("e4");
-  });
-  it("returns empty when nothing qualifies", () => {
-    expect(pruneableSeriesEventIds(events, records, "s1", "2026-08-01")).toEqual([]);
+  it("returns nothing for an empty list", () => {
+    expect(chunkIds([])).toEqual([]);
   });
 });

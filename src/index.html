@@ -115,7 +115,7 @@ import { esc, isAdult, hubConfirm } from "/hub-sdk.js";
 import {
   STATUSES, statusMeta, nextStatus, splitEvents, recordsByMember,
   memberSummary, headcount, WEEKDAYS, occurrencesForSeries, seriesLabel,
-  pruneableSeriesEventIds,
+  chunkIds,
 } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
@@ -319,19 +319,47 @@ async function ensureSeriesEvents() {
   render();
 }
 
-/** Drop a series' future, still-unmarked events, then re-stamp from the new rule. */
-async function restampSeries(seriesId) {
+/**
+ * Delete a series' future, still-unmarked events.
+ *
+ * Every input is re-queried scoped to the series rather than read from the
+ * page's caches. `events` is loaded with LIMIT 300 and `records` with an
+ * UNORDERED LIMIT 3000, so an event whose attendance records fell outside that
+ * truncated window looked unmarked here — and was deleted, taking the records
+ * that proved otherwise with it.
+ *
+ * The hub's row-policy rewriter rejects referencing the governed records table
+ * inside a subquery of a statement targeting events, so this is two reads and a
+ * delete by explicit id list rather than one NOT EXISTS. Every id list is
+ * sliced: D1 rejects a statement carrying more than 100 bound parameters, and a
+ * weekly series clears that in a year.
+ */
+async function pruneSeriesFutureEvents(seriesId) {
   const today = todayIso();
-  // The hub's row-policy rewriter rejects referencing the governed records
-  // table inside a subquery, so compute the prune set client-side and delete
-  // by explicit id list.
-  const pruneIds = pruneableSeriesEventIds(events, records, seriesId, today);
-  if (pruneIds.length) {
-    const ph = pruneIds.map(() => "?").join(",");
-    await db(`DELETE FROM app_attendance__events WHERE id IN (${ph})`, pruneIds);
+  const candidates = await db(
+    "SELECT id FROM app_attendance__events WHERE series_id = ? AND event_date >= ? ORDER BY event_date ASC LIMIT 2000",
+    [seriesId, today],
+  );
+  const ids = (candidates.rows ?? []).map((r) => r.id);
+  if (!ids.length) return;
+  const marked = new Set();
+  for (const chunk of chunkIds(ids)) {
+    const ph = chunk.map(() => "?").join(",");
+    const found = await db(`SELECT DISTINCT event_id FROM app_attendance__records WHERE event_id IN (${ph})`, chunk);
+    for (const row of found.rows ?? []) marked.add(row.event_id);
+  }
+  const pruneIds = ids.filter((id) => !marked.has(id));
+  for (const chunk of chunkIds(pruneIds)) {
+    const ph = chunk.map(() => "?").join(",");
+    await db(`DELETE FROM app_attendance__events WHERE id IN (${ph})`, chunk);
   }
   const pruneSet = new Set(pruneIds);
   events = events.filter((e) => !pruneSet.has(e.id));
+}
+
+/** Drop a series' future, still-unmarked events, then re-stamp from the new rule. */
+async function restampSeries(seriesId) {
+  await pruneSeriesFutureEvents(seriesId);
   await ensureSeriesEvents();
   render();
 }
@@ -369,14 +397,7 @@ async function deactivateSeries(id) {
   closeModal(); render();
   try {
     await db("UPDATE app_attendance__series SET active = 0 WHERE id = ?", [id]);
-    const today = todayIso();
-    const pruneIds = pruneableSeriesEventIds(events, records, id, today);
-    if (pruneIds.length) {
-      const ph = pruneIds.map(() => "?").join(",");
-      await db(`DELETE FROM app_attendance__events WHERE id IN (${ph})`, pruneIds);
-    }
-    const pruneSet = new Set(pruneIds);
-    events = events.filter((e) => !pruneSet.has(e.id));
+    await pruneSeriesFutureEvents(id);
     render();
   } catch (e) { if (idx !== -1 && prev) series[idx] = prev; showError(e.message); }
 }
