@@ -102,6 +102,13 @@
     .modal-actions { display: flex; gap: 8px; margin-top: 6px; justify-content: flex-end; }
     .modal-left { margin-right: auto; }
     @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
+    .search-row { margin-bottom: 12px; }
+    .search-input {
+      width: 100%; border: 1.5px solid var(--border-mid, var(--border, #d1d5db));
+      border-radius: 8px; padding: 9px 11px; font: inherit;
+      background: var(--surface, var(--card, #fff)); color: var(--text, inherit);
+    }
+    .search-input:focus { outline: none; border-color: var(--accent, #6366f1); }
   </style>
   <base href="/run/attendance/">
 </head>
@@ -111,11 +118,11 @@
 </div>
 
 <script type="module">
-import { esc, isAdult, hubConfirm } from "/hub-sdk.js";
+import { esc, isAdult, hubConfirm, searchMatch } from "/hub-sdk.js";
 import {
   STATUSES, statusMeta, nextStatus, splitEvents, recordsByMember,
   memberSummary, headcount, WEEKDAYS, occurrencesForSeries, seriesLabel,
-  chunkIds,
+  chunkIds, searchableFields,
 } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
@@ -129,6 +136,7 @@ let events = [];
 let records = [];
 let series = [];
 let openEventId = null;
+let searchQ = "";       // in-app search (see logic.js searchableFields)
 let error = "";
 let modalEl = null;
 
@@ -415,7 +423,8 @@ function fmtEventDate(iso, time) {
 }
 
 function renderEventList() {
-  const { upcoming, past } = splitEvents(events);
+  const matched = searchQ ? events.filter((e) => searchMatch(searchQ, searchableFields(e))) : events;
+  const { upcoming, past } = splitEvents(matched);
   const summary = memberSummary(records, past);
   const card = (e) => {
     const hc = headcount(records, e.id);
@@ -437,10 +446,12 @@ function renderEventList() {
       ${canManage() ? `<button class="btn" data-add-event>+ Event</button>` : ""}
     </div>
     ${error ? `<div class="error">${esc(error)}</div>` : ""}
+    ${events.length ? `<div class="search-row"><input id="search" class="search-input" type="search" placeholder="Search events…" aria-label="Search events" value="${esc(searchQ)}" /></div>` : ""}
     ${canManage() ? renderSeriesSection() : ""}
     ${upcoming.length ? `<div class="section-head"><h2>Upcoming</h2></div><div class="stack">${upcoming.map(card).join("")}</div>` : ""}
-    ${past.length ? `<div class="section-head"><h2>Past</h2></div><div class="stack">${past.slice(0, 20).map(card).join("")}</div>` : ""}
+    ${past.length ? `<div class="section-head"><h2>Past</h2></div><div class="stack">${(searchQ ? past : past.slice(0, 20)).map(card).join("")}</div>` : ""}
     ${!events.length ? `<div class="card empty">No events yet${canManage() ? " — add your first meeting" : ""}.</div>` : ""}
+    ${events.length && searchQ && !matched.length ? `<div class="card empty">No events match "${esc(searchQ)}".</div>` : ""}
     ${summary.length ? `
       <div class="section-head"><h2>Attendance rates</h2><span class="tiny muted">past events</span></div>
       <div class="stack">
@@ -499,6 +510,16 @@ function renderEvent(event) {
     </div>
   `;
 }
+
+// render() rewrites the whole view, so put the caret back after typing.
+document.addEventListener("input", (e) => {
+  if (e.target.id !== "search") return;
+  searchQ = e.target.value;
+  const caret = e.target.selectionStart;
+  render();
+  const next = document.getElementById("search");
+  if (next) { next.focus(); next.setSelectionRange(caret, caret); }
+});
 
 function render() {
   const root = document.getElementById("root");

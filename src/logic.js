@@ -198,3 +198,13 @@ export function occurrencesForSeries(series, fromIso, toIso) {
   }
   return out;
 }
+
+/**
+ * Fields the in-app search matches against (see hub-sdk `searchMatch`).
+ * Location and notes count as well as the title. Past events are
+ * capped at 20 on screen, so search is the only way to reach an older
+ * one at all.
+ */
+export function searchableFields(item) {
+  return [item.title, item.location, item.notes, item.kind];
+}

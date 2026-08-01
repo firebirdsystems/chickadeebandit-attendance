@@ -3,7 +3,7 @@ import {
   statusMeta, nextStatus, daysUntilDate, splitEvents, recordsByMember,
   isAttended, memberSummary, headcount,
   occurrencesForSeries, seriesLabel, formatTime12, WEEKDAYS,
-  chunkIds, MAX_BOUND_PARAMS,
+  chunkIds, MAX_BOUND_PARAMS, searchableFields,
 } from "../src/logic.js";
 
 const FROM = new Date(2026, 6, 12, 9, 0, 0); // July 12, 2026 local
@@ -158,5 +158,13 @@ describe("chunkIds", () => {
   });
   it("returns nothing for an empty list", () => {
     expect(chunkIds([])).toEqual([]);
+  });
+});
+
+describe("searchableFields", () => {
+  it("matches on location and notes, not just the event title", () => {
+    const fields = searchableFields({ title: "July pack meeting", location: "Scout hut", notes: "bring badges", kind: "meeting" });
+    expect(fields).toContain("Scout hut");
+    expect(fields).toContain("bring badges");
   });
 });
