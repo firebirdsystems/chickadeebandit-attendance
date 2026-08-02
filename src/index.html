@@ -128,6 +128,7 @@ import {
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB = window.__DB_URL ?? "";
 const HUB_MEMBER = window.__CURRENT_MEMBER ?? null;
+const EVENTS = window.__EVENTS_URL ?? "";
 
 let members = [];
 let memberMap = new Map();
@@ -225,6 +226,20 @@ async function refresh() {
 function showError(msg) { error = msg; render(); }
 
 /* ── Mutations ─────────────────────────────────────────────────────────────── */
+// Best-effort: the row is already written, so a failed publish is not fatal.
+async function publishEvent(type, subjectId, payload = {}) {
+  if (!EVENTS) return;
+  try {
+    await fetch(EVENTS, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, subject_id: subjectId, payload }),
+    });
+  } catch {
+    // ignored on purpose
+  }
+}
+
 async function saveEvent(fields, existingId) {
   const now = nowIso();
   if (existingId) {
@@ -244,6 +259,16 @@ async function saveEvent(fields, existingId) {
     try {
       await db("INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
         [row.id, row.title, row.kind, row.event_date, row.start_time, row.location, row.notes, row.created_by, row.created_at]);
+      // Only the hand-created one-off. The series stamper writes ~28 days of
+      // occurrences at a time and re-runs on every load, so publishing there
+      // would fire a burst of events for sessions nobody just scheduled.
+      await publishEvent("attendance.session_created", row.id, {
+        title: row.title,
+        kind: row.kind,
+        event_date: row.event_date,
+        start_time: row.start_time,
+        location: row.location,
+      });
     } catch (e) {
       events = events.filter((x) => x.id !== row.id);
       openEventId = null;

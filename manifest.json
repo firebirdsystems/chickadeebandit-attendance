@@ -34,6 +34,43 @@
     "event_date",
     "start_time"
   ],
+  "automation_actions": {
+    "add_session": {
+      "title": "Schedule an attendance session",
+      "description": "Create a session to take roll at when another app's event fires - a calendar event, a trip, a volunteer shift. The date comes from the trigger payload.",
+      "params": {
+        "created_by": { "type": "member", "label": "Scheduled by", "required": true },
+        "title": { "type": "text", "label": "Session name", "required": true },
+        "event_date": { "type": "text", "label": "Date (YYYY-MM-DD)", "required": true },
+        "kind": {
+          "type": "text",
+          "label": "Kind",
+          "default": "meeting",
+          "options": ["meeting", "practice", "service", "other"]
+        },
+        "start_time": { "type": "text", "label": "Start time (HH:MM)", "default": "" },
+        "location": { "type": "text", "label": "Where", "default": "" }
+      },
+      "dedupe": { "table": "events", "column": "source_event_id" },
+      "steps": [
+        {
+          "op": "insert",
+          "table": "events",
+          "values": {
+            "id": "$uuid",
+            "title": ":title",
+            "kind": ":kind",
+            "event_date": ":event_date",
+            "start_time": ":start_time",
+            "location": ":location",
+            "created_by": ":created_by",
+            "created_at": "$now",
+            "source_event_id": "$event_id"
+          }
+        }
+      ]
+    }
+  },
   "row_policies": {
     "events": {
       "kind": "adult_writable",
@@ -48,6 +85,12 @@
       "kind": "adult_writable",
       "steward_writes_only": true
     }
+  },
+  "publishes": [
+    "attendance.session_created"
+  ],
+  "publish_acls": {
+    "attendance.session_created": { "require_role": "adult" }
   },
   "agenda": {
     "kind": "event",
