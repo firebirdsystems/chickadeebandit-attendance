@@ -30,6 +30,11 @@
     "requires_approval": false
   },
   "storage": "db",
+  "preload": {
+    "events": {"sql": "SELECT id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at FROM app_attendance__events ORDER BY event_date DESC LIMIT 300"},
+    "records": {"sql": "SELECT id, event_id, member_id, status, note, recorded_by, created_at FROM app_attendance__records LIMIT 3000"},
+    "series": {"sql": "SELECT id, title, kind, weekday, interval_weeks, start_time, location, notes, start_date, end_date, active, created_by, created_at FROM app_attendance__series ORDER BY created_at DESC LIMIT 100"}
+  },
   "db_plaintext_columns": [
     "event_date",
     "start_time"
