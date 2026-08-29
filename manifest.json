@@ -37,7 +37,8 @@
   },
   "db_plaintext_columns": [
     "event_date",
-    "start_time"
+    "start_time",
+    "kind"
   ],
   "automation_actions": {
     "add_session": {
