@@ -118,7 +118,18 @@
 </div>
 
 <script type="module">
-import { esc, isAdult, hubConfirm, searchMatch } from "/hub-sdk.js";
+import { esc, isAdult, hubConfirm, searchMatch, hubToday } from "/hub-sdk.js";
+
+// The household's calendar day as a Date, for the pure helpers in logic.js.
+// Those helpers default their date parameter to `new Date()` — the VIEWER
+// DEVICE's calendar — but they compare it against dates STORED on the household
+// calendar, which is what every server-side surface (glance, kiosk, cron,
+// `:today` in declared SQL) reports. Near midnight, or for a member in another
+// timezone, the two name different days. logic.js stays pure and SDK-free, so
+// the household day is supplied here. Noon keeps a DST shift from tipping it
+// into an adjacent day.
+const hubDay = () => new Date(`${hubToday()}T12:00:00`);
+
 import {
   STATUSES, statusMeta, nextStatus, splitEvents, recordsByMember,
   memberSummary, headcount, WEEKDAYS, occurrencesForSeries, seriesLabel,
@@ -449,7 +460,7 @@ function fmtEventDate(iso, time) {
 
 function renderEventList() {
   const matched = searchQ ? events.filter((e) => searchMatch(searchQ, searchableFields(e))) : events;
-  const { upcoming, past } = splitEvents(matched);
+  const { upcoming, past } = splitEvents(matched, hubDay());
   const summary = memberSummary(records, past);
   const card = (e) => {
     const hc = headcount(records, e.id);
