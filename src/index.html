@@ -338,11 +338,11 @@ async function ensureSeriesEvents() {
   if (!active.length) return;
   const from = todayIso();
   const to = addDaysIso(from, 28);
-  const have = new Set(events.filter((e) => e.series_id).map((e) => `${e.series_id} ${e.event_date}`));
+  const have = new Set(events.filter((e) => e.series_id).map((e) => `${e.series_id}\u0000${e.event_date}`));
   const toInsert = [];
   for (const s of active) {
     for (const date of occurrencesForSeries(s, from, to)) {
-      const key = `${s.id} ${date}`;
+      const key = `${s.id}\u0000${date}`;
       if (have.has(key)) continue;
       have.add(key);
       toInsert.push({
