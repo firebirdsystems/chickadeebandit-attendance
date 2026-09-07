@@ -131,15 +131,16 @@ import { esc, isAdult, hubConfirm, searchMatch, hubToday } from "/hub-sdk.js";
 const hubDay = () => new Date(`${hubToday()}T12:00:00`);
 
 import {
-  STATUSES, statusMeta, nextStatus, splitEvents, recordsByMember,
+  statusMeta, nextStatus, splitEvents, recordsByMember,
   memberSummary, headcount, WEEKDAYS, occurrencesForSeries, seriesLabel,
-  chunkIds, searchableFields,
+  chunkIds, searchableFields, buildCalendarEvents,
 } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB = window.__DB_URL ?? "";
 const HUB_MEMBER = window.__CURRENT_MEMBER ?? null;
 const EVENTS = window.__EVENTS_URL ?? "";
+const STORE_URL = window.__STORE_URL ?? "";
 
 let members = [];
 let memberMap = new Map();
@@ -236,6 +237,30 @@ async function refresh() {
 
 function showError(msg) { error = msg; render(); }
 
+/**
+ * Republish the `calendar_events` export so the schedule shows up on the
+ * household calendar and in the ICS feed. Best-effort and never awaited into a
+ * caller's error path: a failed sync must not roll back an event that is
+ * already written, and the next mutation republishes the whole payload anyway.
+ *
+ * Only `events` goes out. The store key is scope-wide — every member, and in a
+ * shared space every household in it, reads the same bytes — so `records`, whose
+ * row policy narrows a mark to the member it is about, must never be sourced
+ * here. See buildCalendarEvents in logic.js.
+ *
+ * The store ACL requires an adult, and every caller below is already gated on
+ * canManage(); no member-reachable path changes an exported row.
+ */
+async function syncCalendar() {
+  if (!STORE_URL || !DB) return;
+  const payload = buildCalendarEvents(events, hubToday());
+  await fetch(STORE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key: "calendar_events", value: JSON.stringify(payload) }),
+  }).catch(() => {});
+}
+
 /* ── Mutations ─────────────────────────────────────────────────────────────── */
 // Best-effort: the row is already written, so a failed publish is not fatal.
 async function publishEvent(type, subjectId, payload = {}) {
@@ -261,6 +286,7 @@ async function saveEvent(fields, existingId) {
     try {
       await db("UPDATE app_attendance__events SET title=?, kind=?, event_date=?, start_time=?, location=?, notes=? WHERE id=?",
         [fields.title, fields.kind, fields.event_date, fields.start_time, fields.location, fields.notes, existingId]);
+      await syncCalendar();
     } catch (e) { if (idx !== -1 && prev) events[idx] = prev; showError(e.message); }
   } else {
     const row = { id: crypto.randomUUID(), ...fields, created_by: me.id, created_at: now };
@@ -280,6 +306,7 @@ async function saveEvent(fields, existingId) {
         start_time: row.start_time,
         location: row.location,
       });
+      await syncCalendar();
     } catch (e) {
       events = events.filter((x) => x.id !== row.id);
       openEventId = null;
@@ -296,8 +323,10 @@ async function deleteEvent(id) {
   records = records.filter((r) => r.event_id !== id);
   if (openEventId === id) openEventId = null;
   closeModal(); render();
-  try { await db("DELETE FROM app_attendance__events WHERE id=?", [id]); }
-  catch (e) { ({ events, records } = prev); showError(e.message); }
+  try {
+    await db("DELETE FROM app_attendance__events WHERE id=?", [id]);
+    await syncCalendar();
+  } catch (e) { ({ events, records } = prev); showError(e.message); }
 }
 
 /** Tap-to-cycle a member's status for an event (leader only). Upserts. */
@@ -360,6 +389,7 @@ async function ensureSeriesEvents() {
       events.push(row);
     } catch (e) { showError(e.message); }
   }
+  await syncCalendar();
   render();
 }
 
@@ -399,6 +429,11 @@ async function pruneSeriesFutureEvents(seriesId) {
   }
   const pruneSet = new Set(pruneIds);
   events = events.filter((e) => !pruneSet.has(e.id));
+  // The pruned rows were exported, so republish here rather than in each
+  // caller: restampSeries goes on to stamp new ones (and republishes again,
+  // harmlessly — the payload is rebuilt whole every time), while
+  // deactivateSeries only ever deletes.
+  await syncCalendar();
 }
 
 /** Drop a series' future, still-unmarked events, then re-stamp from the new rule. */

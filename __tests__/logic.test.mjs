@@ -4,6 +4,7 @@ import {
   isAttended, memberSummary, headcount,
   occurrencesForSeries, seriesLabel, formatTime12, WEEKDAYS,
   chunkIds, MAX_BOUND_PARAMS, searchableFields,
+  buildCalendarEvents, CALENDAR_EXPORT_MAX_EVENTS, CALENDAR_EXPORT_HORIZON_DAYS,
 } from "../src/logic.js";
 
 const FROM = new Date(2026, 6, 12, 9, 0, 0); // July 12, 2026 local
@@ -166,5 +167,76 @@ describe("searchableFields", () => {
     const fields = searchableFields({ title: "July pack meeting", location: "Scout hut", notes: "bring badges", kind: "meeting" });
     expect(fields).toContain("Scout hut");
     expect(fields).toContain("bring badges");
+  });
+});
+
+describe("buildCalendarEvents", () => {
+  const TODAY = "2026-09-07";
+  const ev = (over) => ({
+    id: "e1", title: "Pack meeting", kind: "meeting", event_date: "2026-09-08",
+    start_time: "18:30", location: "Scout hut", notes: "bring badges", ...over,
+  });
+
+  it("emits a timed entry the hub can parse", () => {
+    const [out] = buildCalendarEvents([ev()], TODAY);
+    expect(out.id).toBe("e1");
+    expect(out.title).toBe("Pack meeting");
+    expect(out.start).toBe("2026-09-08T18:30");
+    // No end column exists, so the entry is a point in the day, not a range.
+    expect(out.end).toBe("2026-09-08T18:30");
+    expect(out.all_day).toBe(false);
+    expect(out.location).toBe("Scout hut");
+    expect(out.description).toBe("Meeting");
+    // A session belongs to the whole org, not to one member, and the roll is
+    // exactly the part that must not travel with it.
+    expect(out.member_ids).toEqual([]);
+    expect(out.source_label).toBe("Attendance");
+  });
+
+  it("degrades a session with no time to an all-day entry", () => {
+    const [out] = buildCalendarEvents([ev({ start_time: "" })], TODAY);
+    expect(out.start).toBe("2026-09-08");
+    expect(out.end).toBe("2026-09-08");
+    expect(out.all_day).toBe(true);
+  });
+
+  it("includes today, and drops yesterday and anything past the horizon", () => {
+    const beyond = plusDays(TODAY, CALENDAR_EXPORT_HORIZON_DAYS + 1);
+    const edge = plusDays(TODAY, CALENDAR_EXPORT_HORIZON_DAYS);
+    const ids = buildCalendarEvents([
+      ev({ id: "yesterday", event_date: plusDays(TODAY, -1) }),
+      ev({ id: "today", event_date: TODAY }),
+      ev({ id: "edge", event_date: edge }),
+      ev({ id: "beyond", event_date: beyond }),
+    ], TODAY).map((e) => e.id);
+    expect(ids).toEqual(["today", "edge"]);
+  });
+
+  it("never leaks the leader's notes into the payload", () => {
+    // This blob reaches the ICS feed, which external calendar services fetch.
+    const json = JSON.stringify(buildCalendarEvents([ev()], TODAY));
+    expect(json).not.toContain("bring badges");
+    expect(json).not.toContain("notes");
+  });
+
+  it("caps at the hub's per-app ceiling, keeping the nearest sessions", () => {
+    const many = [];
+    for (let i = 0; i < CALENDAR_EXPORT_MAX_EVENTS + 20; i++) {
+      many.push(ev({ id: `e${i}`, event_date: plusDays(TODAY, i + 1) }));
+    }
+    // Shuffled in reverse so the cap can only survive by sorting first.
+    const out = buildCalendarEvents(many.reverse(), TODAY);
+    expect(out).toHaveLength(CALENDAR_EXPORT_MAX_EVENTS);
+    expect(out[0].id).toBe("e0");
+    expect(out[out.length - 1].id).toBe(`e${CALENDAR_EXPORT_MAX_EVENTS - 1}`);
+  });
+
+  it("labels an unknown or missing kind rather than shipping an empty one", () => {
+    expect(buildCalendarEvents([ev({ kind: "" })], TODAY)[0].description).toBe("Session");
+    expect(buildCalendarEvents([ev({ kind: "service" })], TODAY)[0].description).toBe("Service");
+  });
+
+  it("publishes nothing when the household day is unreadable", () => {
+    expect(buildCalendarEvents([ev()], "")).toEqual([]);
   });
 });

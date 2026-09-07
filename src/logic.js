@@ -208,3 +208,69 @@ export function occurrencesForSeries(series, fromIso, toIso) {
 export function searchableFields(item) {
   return [item.title, item.location, item.notes, item.kind];
 }
+
+/* ── Calendar export ───────────────────────────────────────────────────────── */
+
+export const CALENDAR_EXPORT_HORIZON_DAYS = 180;
+export const CALENDAR_EXPORT_MAX_EVENTS = 100;
+
+/** "Meeting" from "meeting" — the short label a calendar entry carries. */
+export function eventKindLabel(kind) {
+  const k = String(kind ?? "").trim();
+  if (!k) return "Session";
+  return `${k[0].toUpperCase()}${k.slice(1)}`;
+}
+
+/**
+ * Build the `calendar_events` payload from upcoming sessions.
+ *
+ * Shape matches what the hub's cross-app aggregation consumes — see
+ * `normalizeExportedEvent` in packages/hub/src/cloudflare/calendar-feed.ts.
+ * An event with no `start_time` becomes an all-day entry: the hub derives
+ * `allDay` from the absence of a `T` in `start`, so a date-only session
+ * degrades on its own rather than being dropped. There is no end column, so
+ * `end` equals `start` and the calendar draws a point in the day.
+ *
+ * ONLY the events table is exported. The store blob this feeds is scope-wide —
+ * every member of the household, and in a shared space every household in it,
+ * reads the same bytes, and row policies do not filter it. `events` is
+ * `adult_writable`, so the whole scope already reads every row: safe. The
+ * `records` table carries `member_read_column: "member_id"`, meaning a mark is
+ * readable only by the member it is about and their supervisor — a record must
+ * NEVER reach this payload, and no headcount derived from one may either.
+ *
+ * `notes` is deliberately NOT exported. This payload reaches the household's
+ * ICS feed, which external calendar services fetch, and a note is free text a
+ * leader wrote for the group. Location IS exported because telling you where to
+ * show up is what a calendar entry is FOR.
+ *
+ * `member_ids` is always empty: an attendance session is the org's schedule,
+ * not one person's appointment, and the roll is exactly the part we withhold.
+ *
+ * The horizon is measured from `todayIso` — the HOUSEHOLD's day, supplied by
+ * the caller — rather than from a device clock, so every viewer publishes the
+ * same window.
+ */
+export function buildCalendarEvents(events, todayIso) {
+  const today = isoToNoon(todayIso);
+  if (today == null) return [];
+  const horizon = noonToIso(addDays(today, CALENDAR_EXPORT_HORIZON_DAYS));
+  return events
+    .filter((e) => e.event_date >= todayIso && e.event_date <= horizon)
+    .map((e) => {
+      const start = e.start_time ? `${e.event_date}T${e.start_time}` : e.event_date;
+      return {
+        id: e.id,
+        title: e.title,
+        description: eventKindLabel(e.kind),
+        location: e.location || "",
+        start,
+        end: start,
+        all_day: !e.start_time,
+        member_ids: [],
+        source_label: "Attendance",
+      };
+    })
+    .sort((a, b) => String(a.start).localeCompare(String(b.start)))
+    .slice(0, CALENDAR_EXPORT_MAX_EVENTS);
+}
