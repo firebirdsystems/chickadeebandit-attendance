@@ -1,5 +1,7 @@
 # Attendance
 
+A [Chickadee Bandit](https://chickadeebandit.com/app-library/attendance) app.
+
 Meeting and practice roll call for clubs and troops — tap-to-cycle marking,
 headcounts per event, and per-member attendance rates so drifting members
 surface early.
