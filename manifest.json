@@ -47,7 +47,7 @@
       "params": {
         "created_by": { "type": "member", "label": "Scheduled by", "required": true },
         "title": { "type": "text", "label": "Session name", "required": true },
-        "event_date": { "type": "text", "label": "Date (YYYY-MM-DD)", "required": true },
+        "event_date": { "type": "text", "format": "date", "label": "Date (YYYY-MM-DD)", "required": true },
         "kind": {
           "type": "text",
           "label": "Kind",
