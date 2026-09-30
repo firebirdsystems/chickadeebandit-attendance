@@ -61,6 +61,116 @@
           "expect": { "status": 200, "rowCount": 1 }
         }
       ]
+    },
+    {
+      "name": "in a shared space a participant adult reads only their own attendance marks while the steward reads every member's",
+      "context": "shared_space",
+      "members": { "a": "adult", "b": "adult", "steward": "admin" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "params": [
+            "ev1",
+            "Club night",
+            "meeting",
+            "2026-08-04",
+            "18:00",
+            "",
+            "",
+            "{{steward}}",
+            "2026-08-01T00:00:00Z"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, note, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          "params": ["rec-a", "ev1", "{{a}}", "present", "", "{{steward}}", "2026-08-04T18:05:00Z"]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, note, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          "params": ["rec-b", "ev1", "{{b}}", "absent", "", "{{steward}}", "2026-08-04T18:05:00Z"]
+        },
+        {
+          "action": "db",
+          "as": "a",
+          "sql": "SELECT id, member_id FROM app_attendance__records WHERE event_id = 'ev1'",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "rec-a", "member_id": "scn-a" }] }
+        },
+        {
+          "action": "db",
+          "as": "steward",
+          "sql": "SELECT id FROM app_attendance__records WHERE event_id = 'ev1' ORDER BY id",
+          "expect": { "status": 200, "rowCount": 2, "rowsContain": [{ "id": "rec-a" }, { "id": "rec-b" }] }
+        }
+      ]
+    },
+    {
+      "name": "in a household every adult reads every member's attendance marks",
+      "members": { "a": "adult", "b": "adult" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "params": ["ev1", "Club night", "meeting", "2026-08-04", "18:00", "", "", "{{a}}", "2026-08-01T00:00:00Z"]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, note, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          "params": ["rec-b", "ev1", "{{b}}", "absent", "", "{{a}}", "2026-08-04T18:05:00Z"]
+        },
+        {
+          "action": "db",
+          "as": "a",
+          "sql": "SELECT id FROM app_attendance__records WHERE event_id = 'ev1'",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "rec-b" }] }
+        }
+      ]
+    },
+    {
+      "name": "in a shared space a participant adult cannot change or remove another member's attendance mark",
+      "context": "shared_space",
+      "members": { "a": "adult", "b": "adult", "steward": "admin" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_attendance__events (id, title, event_date, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+          "params": ["ev1", "Meeting", "2026-08-04", "{{steward}}", "2026-01-01T00:00:00Z"]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+          "params": ["r-b", "ev1", "{{b}}", "present", "{{steward}}", "2026-01-01T00:00:00Z"]
+        },
+        {
+          "action": "db",
+          "as": "a",
+          "sql": "UPDATE app_attendance__records SET status = 'absent' WHERE id = ?",
+          "params": ["r-b"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "a",
+          "sql": "DELETE FROM app_attendance__records WHERE id = ?",
+          "params": ["r-b"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "a",
+          "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+          "params": ["r-x", "ev1", "{{b}}", "late", "{{a}}", "2026-01-01T00:00:00Z"],
+          "expect": { "status": 403, "errorIncludes": "only create rows for yourself" }
+        },
+        {
+          "action": "db",
+          "as": "steward",
+          "sql": "SELECT id, status FROM app_attendance__records",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "r-b", "status": "present" }] }
+        }
+      ]
     }
   ]
 }
