@@ -4,16 +4,16 @@
  */
 
 export const STATUSES = [
-  { value: "present", label: "Present", icon: "✅" },
-  { value: "late",    label: "Late",    icon: "🕐" },
-  { value: "excused", label: "Excused", icon: "📝" },
-  { value: "absent",  label: "Absent",  icon: "❌" },
+  { value: "present", label: "Present", glyph: "tick" },
+  { value: "late",    label: "Late",    glyph: "clock" },
+  { value: "excused", label: "Excused", glyph: "note" },
+  { value: "absent",  label: "Absent",  glyph: "close" },
 ];
 
 const STATUS_BY_VALUE = new Map(STATUSES.map((s) => [s.value, s]));
 
 export function statusMeta(v) {
-  return STATUS_BY_VALUE.get(v) ?? { value: "absent", label: "Absent", icon: "❌" };
+  return STATUS_BY_VALUE.get(v) ?? { value: "absent", label: "Absent", glyph: "close" };
 }
 
 /** The next status in the tap-to-cycle order (unmarked → present → late → excused → absent → present…). */

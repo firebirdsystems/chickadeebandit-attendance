@@ -118,7 +118,7 @@
 </div>
 
 <script type="module">
-import { esc, isAdult, hubConfirm, searchMatch, hubToday } from "/hub-sdk.js";
+import { esc, isAdult, hubConfirm, searchMatch, hubToday, glyph } from "/hub-sdk.js";
 
 // The household's calendar day as a Date, for the pure helpers in logic.js.
 // Those helpers default their date parameter to `new Date()` — the VIEWER
@@ -511,7 +511,7 @@ function renderEventList() {
   return `
     <div class="topbar">
       <div>
-        <h1>✅ Attendance</h1>
+        <h1>${glyph("tick")} Attendance</h1>
         <p class="muted tiny">Take the roll in seconds; spot who's drifting.</p>
       </div>
       ${canManage() ? `<button class="btn" data-add-event>+ Event</button>` : ""}
@@ -574,8 +574,8 @@ function renderEvent(event) {
           <div class="roster-row">
             <span class="roster-name">${esc(m.name)}</span>
             ${canManage()
-              ? `<button class="status-btn ${rec ? esc(rec.status) : ""}" data-cycle="${esc(m.id)}">${meta ? `${meta.icon} ${esc(meta.label)}` : "— tap to mark"}</button>`
-              : `<span class="status-chip">${meta ? `${meta.icon} ${esc(meta.label)}` : "—"}</span>`}
+              ? `<button class="status-btn ${rec ? esc(rec.status) : ""}" data-cycle="${esc(m.id)}">${meta ? `${glyph(meta.glyph, { accent: "currentColor" })} ${esc(meta.label)}` : "— tap to mark"}</button>`
+              : `<span class="status-chip">${meta ? `${glyph(meta.glyph, { accent: "currentColor" })} ${esc(meta.label)}` : "—"}</span>`}
           </div>`;
       }).join("")}
     </div>
