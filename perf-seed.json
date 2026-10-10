@@ -1,0 +1,450 @@
+{
+ "seed": [
+  {
+   "sql": "INSERT INTO app_attendance__series (id, title, kind, weekday, interval_weeks, start_time, location, notes, start_date, active, created_by, created_at) VALUES (?, ?, ?, CAST(strftime('%w','now','+0 days') AS INTEGER), 1, ?, ?, ?, date('now','-56 days'), 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-58 days'))",
+   "params": [
+    "ser-practice",
+    "Weekly practice",
+    "practice",
+    "18:00",
+    "Lincoln Field",
+    "Bring water and shin guards",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__series (id, title, kind, weekday, interval_weeks, start_time, location, start_date, active, created_by, created_at) VALUES (?, ?, ?, CAST(strftime('%w','now','+3 days') AS INTEGER), 1, ?, ?, date('now','-53 days'), 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-55 days'))",
+   "params": [
+    "ser-meeting",
+    "Troop meeting",
+    "meeting",
+    "19:00",
+    "Community hall",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__series (id, title, kind, weekday, interval_weeks, start_time, location, start_date, end_date, active, created_by, created_at) VALUES (?, ?, ?, CAST(strftime('%w','now','-40 days') AS INTEGER), 1, ?, ?, date('now','-110 days'), date('now','-40 days'), 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-112 days'))",
+   "params": [
+    "ser-summer",
+    "Summer swim practice",
+    "practice",
+    "08:30",
+    "Rec center pool",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','-21 days'), ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-21 days'))",
+   "params": [
+    "ev-1",
+    "Weekly practice",
+    "practice",
+    "18:00",
+    "Lincoln Field",
+    "Bring water and shin guards",
+    "ser-practice",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-21 days'))",
+   "params": [
+    "rec-1",
+    "ev-1",
+    "{{me}}",
+    "present",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','-14 days'), ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-14 days'))",
+   "params": [
+    "ev-2",
+    "Weekly practice",
+    "practice",
+    "18:00",
+    "Lincoln Field",
+    "Bring water and shin guards",
+    "ser-practice",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-14 days'))",
+   "params": [
+    "rec-2",
+    "ev-2",
+    "{{me}}",
+    "late",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','-7 days'), ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-7 days'))",
+   "params": [
+    "ev-3",
+    "Weekly practice",
+    "practice",
+    "18:00",
+    "Lincoln Field",
+    "Bring water and shin guards",
+    "ser-practice",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-7 days'))",
+   "params": [
+    "rec-3",
+    "ev-3",
+    "{{me}}",
+    "present",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','+0 days'), ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 days'))",
+   "params": [
+    "ev-4",
+    "Weekly practice",
+    "practice",
+    "18:00",
+    "Lincoln Field",
+    "Bring water and shin guards",
+    "ser-practice",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hours'))",
+   "params": [
+    "rec-4",
+    "ev-4",
+    "{{me}}",
+    "present",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','+7 days'), ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 days'))",
+   "params": [
+    "ev-5",
+    "Weekly practice",
+    "practice",
+    "18:00",
+    "Lincoln Field",
+    "Bring water and shin guards",
+    "ser-practice",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','+14 days'), ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 days'))",
+   "params": [
+    "ev-6",
+    "Weekly practice",
+    "practice",
+    "18:00",
+    "Lincoln Field",
+    "Bring water and shin guards",
+    "ser-practice",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','+21 days'), ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 days'))",
+   "params": [
+    "ev-7",
+    "Weekly practice",
+    "practice",
+    "18:00",
+    "Lincoln Field",
+    "Bring water and shin guards",
+    "ser-practice",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','+28 days'), ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 days'))",
+   "params": [
+    "ev-8",
+    "Weekly practice",
+    "practice",
+    "18:00",
+    "Lincoln Field",
+    "Bring water and shin guards",
+    "ser-practice",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','-25 days'), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-25 days'))",
+   "params": [
+    "ev-9",
+    "Troop meeting",
+    "meeting",
+    "19:00",
+    "Community hall",
+    "ser-meeting",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-25 days'))",
+   "params": [
+    "rec-5",
+    "ev-9",
+    "{{me}}",
+    "present",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','-18 days'), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-18 days'))",
+   "params": [
+    "ev-10",
+    "Troop meeting",
+    "meeting",
+    "19:00",
+    "Community hall",
+    "ser-meeting",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-18 days'))",
+   "params": [
+    "rec-6",
+    "ev-10",
+    "{{me}}",
+    "excused",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','-11 days'), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-11 days'))",
+   "params": [
+    "ev-11",
+    "Troop meeting",
+    "meeting",
+    "19:00",
+    "Community hall",
+    "ser-meeting",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-11 days'))",
+   "params": [
+    "rec-7",
+    "ev-11",
+    "{{me}}",
+    "present",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','-4 days'), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-4 days'))",
+   "params": [
+    "ev-12",
+    "Troop meeting",
+    "meeting",
+    "19:00",
+    "Community hall",
+    "ser-meeting",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-4 days'))",
+   "params": [
+    "rec-8",
+    "ev-12",
+    "{{me}}",
+    "absent",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','+3 days'), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 days'))",
+   "params": [
+    "ev-13",
+    "Troop meeting",
+    "meeting",
+    "19:00",
+    "Community hall",
+    "ser-meeting",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','+10 days'), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 days'))",
+   "params": [
+    "ev-14",
+    "Troop meeting",
+    "meeting",
+    "19:00",
+    "Community hall",
+    "ser-meeting",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','+17 days'), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 days'))",
+   "params": [
+    "ev-15",
+    "Troop meeting",
+    "meeting",
+    "19:00",
+    "Community hall",
+    "ser-meeting",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','+24 days'), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 days'))",
+   "params": [
+    "ev-16",
+    "Troop meeting",
+    "meeting",
+    "19:00",
+    "Community hall",
+    "ser-meeting",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','-54 days'), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-54 days'))",
+   "params": [
+    "ev-17",
+    "Summer swim practice",
+    "practice",
+    "08:30",
+    "Rec center pool",
+    "ser-summer",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-54 days'))",
+   "params": [
+    "rec-9",
+    "ev-17",
+    "{{me}}",
+    "present",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','-47 days'), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-47 days'))",
+   "params": [
+    "ev-18",
+    "Summer swim practice",
+    "practice",
+    "08:30",
+    "Rec center pool",
+    "ser-summer",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-47 days'))",
+   "params": [
+    "rec-10",
+    "ev-18",
+    "{{me}}",
+    "present",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, series_id, created_by, created_at) VALUES (?, ?, ?, date('now','-40 days'), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-40 days'))",
+   "params": [
+    "ev-19",
+    "Summer swim practice",
+    "practice",
+    "08:30",
+    "Rec center pool",
+    "ser-summer",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-40 days'))",
+   "params": [
+    "rec-11",
+    "ev-19",
+    "{{me}}",
+    "late",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, created_by, created_at) VALUES (?, ?, ?, date('now','-9 days'), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-9 days'))",
+   "params": [
+    "ev-20",
+    "Miller Park cleanup",
+    "service",
+    "09:00",
+    "Miller Park",
+    "Gloves and bags provided",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-9 days'))",
+   "params": [
+    "rec-12",
+    "ev-20",
+    "{{me}}",
+    "present",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, created_by, created_at) VALUES (?, ?, ?, date('now','-30 days'), ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days'))",
+   "params": [
+    "ev-21",
+    "Parent information night",
+    "meeting",
+    "18:30",
+    "School library",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days'))",
+   "params": [
+    "rec-13",
+    "ev-21",
+    "{{me}}",
+    "excused",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, created_by, created_at) VALUES (?, ?, ?, date('now','+5 days'), ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 days'))",
+   "params": [
+    "ev-22",
+    "Fall food drive",
+    "service",
+    "10:00",
+    "Grocery co-op parking lot",
+    "Two-hour shifts",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, created_by, created_at) VALUES (?, ?, ?, date('now','+12 days'), ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 days'))",
+   "params": [
+    "ev-23",
+    "End of season cookout",
+    "other",
+    "16:00",
+    "Riverside pavilion",
+    "{{me}}"
+   ]
+  }
+ ]
+}
