@@ -118,7 +118,7 @@
 </div>
 
 <script type="module">
-import { esc, isAdult, hubConfirm, searchMatch, hubToday, glyph } from "/hub-sdk.js";
+import { esc, hubConfirm, searchMatch, hubToday, glyph } from "/hub-sdk.js";
 
 // The household's calendar day as a Date, for the pure helpers in logic.js.
 // Those helpers default their date parameter to `new Date()` — the VIEWER
@@ -131,9 +131,10 @@ import { esc, isAdult, hubConfirm, searchMatch, hubToday, glyph } from "/hub-sdk
 const hubDay = () => new Date(`${hubToday()}T12:00:00`);
 
 import {
-  statusMeta, nextStatus, splitEvents, recordsByMember,
+  statusMeta, nextStatus, splitEvents, recordsByMember, isAttended,
   memberSummary, headcount, WEEKDAYS, occurrencesForSeries, seriesLabel,
   chunkIds, searchableFields, buildCalendarEvents,
+  takesAttendance, managesSchedule, canMark,
 } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
@@ -141,6 +142,11 @@ const DB = window.__DB_URL ?? "";
 const HUB_MEMBER = window.__CURRENT_MEMBER ?? null;
 const EVENTS = window.__EVENTS_URL ?? "";
 const STORE_URL = window.__STORE_URL ?? "";
+// Where the app is running. The hub decides every read and write; these only
+// keep the page from offering a view that would be empty or a button that
+// would be refused.
+const TENANT = { tenantKind: window.__TENANT_KIND ?? "household", spaceKind: window.__SPACE_KIND ?? null, isAdmin: window.__IS_ADMIN === true };
+const IN_SPACE = TENANT.tenantKind !== "household";
 
 let members = [];
 let memberMap = new Map();
@@ -164,7 +170,11 @@ function addDaysIso(iso, n) {
   d.setDate(d.getDate() + n);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-function canManage() { return !!me && isAdult(me); }
+/** Adds and edits events and starts a series: any adult, the steward alone in a roster space. Deleting an event also needs canTakeRoll(). */
+function canManage() { return !!me && managesSchedule(me, TENANT); }
+/** Reads everyone's marks and marks anyone: any adult in a household, the steward in a shared space. */
+function canTakeRoll() { return !!me && takesAttendance(me, TENANT); }
+const WHO_TAKES_ROLL = IN_SPACE ? "the steward" : "an adult";
 function memberName(id) { return memberMap.get(id)?.name ?? "Former member"; }
 
 /* ── DB helper ─────────────────────────────────────────────────────────────── */
@@ -175,8 +185,8 @@ async function db(sql, params = []) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sql, params }),
   });
-  const json = await res.json();
-  if (json.error) throw new Error(json.error);
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.error) throw new Error(json.error || "That could not be saved");
   return json;
 }
 
@@ -315,7 +325,13 @@ async function saveEvent(fields, existingId) {
   }
 }
 
+/**
+ * Refused for anyone who does not take attendance. The event's marks go with
+ * it, and they read only their own, so they would be deleting a roll they
+ * cannot see.
+ */
 async function deleteEvent(id) {
+  if (!canTakeRoll()) { closeModal(); showError(`Only ${WHO_TAKES_ROLL} can delete an event.`); return; }
   const ok = await hubConfirm({ message: "Delete this event?", description: "Its attendance records go with it.", confirmLabel: "Delete", destructive: true });
   if (!ok) return;
   const prev = { events, records };
@@ -329,8 +345,9 @@ async function deleteEvent(id) {
   } catch (e) { ({ events, records } = prev); showError(e.message); }
 }
 
-/** Tap-to-cycle a member's status for an event (leader only). Upserts. */
+/** Tap-to-cycle a member's status for an event. Upserts. */
 async function cycleStatus(eventId, memberId) {
+  if (!canMark(memberId, me, TENANT)) return;
   const existing = records.find((r) => r.event_id === eventId && r.member_id === memberId);
   const status = nextStatus(existing?.status);
   const now = nowIso();
@@ -340,7 +357,8 @@ async function cycleStatus(eventId, memberId) {
     existing.recorded_by = me.id;
     render();
     try {
-      await db("UPDATE app_attendance__records SET status=?, recorded_by=? WHERE id=?", [status, me.id, existing.id]);
+      const { changed } = await db("UPDATE app_attendance__records SET status=?, recorded_by=? WHERE id=?", [status, me.id, existing.id]);
+      if (changed === 0) throw new Error(`That mark was not changed. Only ${WHO_TAKES_ROLL} can change it.`);
     } catch (e) { Object.assign(existing, prev); showError(e.message); }
     return;
   }
@@ -359,7 +377,8 @@ async function cycleStatus(eventId, memberId) {
  * Stamp out real event rows for every active series across the next 28 days,
  * skipping dates already materialized. Idempotent both locally (the `have` set)
  * and in the DB (INSERT OR IGNORE against the UNIQUE (series_id, event_date)
- * index). Adults only — events are adult_writable, so a member insert would 403.
+ * index). Only for whoever manages the schedule: events are adult_writable, and
+ * in a roster space steward-written, so anyone else's insert would 403.
  */
 async function ensureSeriesEvents() {
   if (!DB || !canManage()) return;
@@ -407,8 +426,13 @@ async function ensureSeriesEvents() {
  * delete by explicit id list rather than one NOT EXISTS. Every id list is
  * sliced: D1 rejects a statement carrying more than 100 bound parameters, and a
  * weekly series clears that in a year.
+ *
+ * Refused for anyone who does not take attendance. They read only their own
+ * marks, so a session the roll was already taken for would look unmarked to
+ * them and be deleted.
  */
 async function pruneSeriesFutureEvents(seriesId) {
+  if (!canTakeRoll()) throw new Error(`Only ${WHO_TAKES_ROLL} can change a series.`);
   const today = todayIso();
   const candidates = await db(
     "SELECT id FROM app_attendance__events WHERE series_id = ? AND event_date >= ? ORDER BY event_date ASC LIMIT 2000",
@@ -446,6 +470,8 @@ async function restampSeries(seriesId) {
 async function saveSeries(fields, existingId) {
   const now = nowIso();
   if (existingId) {
+    // Editing re-stamps the series, which prunes its future sessions.
+    if (!canTakeRoll()) { closeModal(); showError(`Only ${WHO_TAKES_ROLL} can change a series.`); return; }
     const idx = series.findIndex((s) => s.id === existingId);
     const prev = idx !== -1 ? series[idx] : null;
     if (idx !== -1) series[idx] = { ...series[idx], ...fields };
@@ -468,6 +494,7 @@ async function saveSeries(fields, existingId) {
 }
 
 async function deactivateSeries(id) {
+  if (!canTakeRoll()) { closeModal(); showError(`Only ${WHO_TAKES_ROLL} can change a series.`); return; }
   const ok = await hubConfirm({ message: "Stop this recurring series?", description: "Upcoming unmarked sessions are removed; past and already-marked ones stay.", confirmLabel: "Stop series", destructive: true });
   if (!ok) return;
   const idx = series.findIndex((s) => s.id === id);
@@ -496,16 +523,22 @@ function fmtEventDate(iso, time) {
 function renderEventList() {
   const matched = searchQ ? events.filter((e) => searchMatch(searchQ, searchableFields(e))) : events;
   const { upcoming, past } = splitEvents(matched, hubDay());
-  const summary = memberSummary(records, past);
+  // Whoever takes attendance reads every mark. Everyone else reads their own,
+  // so the counts and rates below are shown as theirs, not the group's.
+  const all = canTakeRoll();
+  const summary = memberSummary(all ? records : records.filter((r) => r.member_id === me?.id), past);
   const card = (e) => {
     const hc = headcount(records, e.id);
+    const mine = all ? null : records.find((r) => r.event_id === e.id && r.member_id === me?.id);
     return `
       <button class="event-card" data-open="${esc(e.id)}">
         <div class="event-body">
           <div class="event-title">${esc(e.title)}${e.series_id ? ` <span class="muted" title="Recurring">↻</span>` : ""}</div>
           <div class="event-meta">${esc(fmtEventDate(e.event_date, e.start_time))}${e.location ? ` · ${esc(e.location)}` : ""}</div>
         </div>
-        ${hc.marked ? `<span class="pill green">${hc.present + hc.late}/${hc.marked} showed</span>` : `<span class="pill">Not taken</span>`}
+        ${all
+          ? (hc.marked ? `<span class="pill green">${hc.present + hc.late}/${hc.marked} showed</span>` : `<span class="pill">Not taken</span>`)
+          : (mine ? `<span class="pill ${isAttended(mine.status) ? "green" : ""}">You: ${esc(statusMeta(mine.status).label)}</span>` : `<span class="pill">Not marked</span>`)}
       </button>`;
   };
   return `
@@ -524,7 +557,7 @@ function renderEventList() {
     ${!events.length ? `<div class="card empty">No events yet${canManage() ? " — add your first meeting" : ""}.</div>` : ""}
     ${events.length && searchQ && !matched.length ? `<div class="card empty">No events match "${esc(searchQ)}".</div>` : ""}
     ${summary.length ? `
-      <div class="section-head"><h2>Attendance rates</h2><span class="tiny muted">past events</span></div>
+      <div class="section-head"><h2>${all ? "Attendance rates" : "Your attendance"}</h2><span class="tiny muted">past events</span></div>
       <div class="stack">
         ${summary.map((s) => `
           <div class="summary-row">
@@ -538,16 +571,25 @@ function renderEventList() {
 
 function renderSeriesSection() {
   const active = series.filter((s) => Number(s.active) === 1);
-  return `
-    <div class="section-head"><h2>Recurring</h2><button class="btn btn-ghost btn-sm" data-add-series>+ Series</button></div>
-    ${active.length ? `<div class="stack">${active.map((s) => `
-      <button class="event-card" data-edit-series="${esc(s.id)}">
+  // Editing or stopping a series removes its unmarked future sessions, and
+  // only whoever takes attendance can tell which sessions are unmarked.
+  const editable = canTakeRoll();
+  const body = (s) => `
         <div class="event-body">
           <div class="event-title">↻ ${esc(s.title)}</div>
           <div class="event-meta">${esc(seriesLabel(s))}${s.location ? ` · ${esc(s.location)}` : ""}</div>
         </div>
-        <span class="pill">Series</span>
-      </button>`).join("")}</div>`
+        <span class="pill">Series</span>`;
+  return `
+    <div class="section-head"><h2>Recurring</h2><button class="btn btn-ghost btn-sm" data-add-series>+ Series</button></div>
+    ${active.length && !editable ? `<p class="tiny muted" style="margin:0 2px 8px" data-testid="series-note">Only ${WHO_TAKES_ROLL} can edit or stop a series.</p>` : ""}
+    ${active.length ? `<div class="stack">${active.map((s) => editable
+      ? `
+      <button class="event-card" data-edit-series="${esc(s.id)}">${body(s)}
+      </button>`
+      : `
+      <div class="event-card" style="cursor:default">${body(s)}
+      </div>`).join("")}</div>`
       : `<div class="card empty tiny">No recurring series — add one to auto-schedule practices onto the calendar and Today view.</div>`}
   `;
 }
@@ -555,25 +597,30 @@ function renderSeriesSection() {
 function renderEvent(event) {
   const marks = recordsByMember(records, event.id);
   const hc = headcount(records, event.id);
+  const all = canTakeRoll();
+  // Without the whole roll to read, the roster is the viewer's own row.
+  const shown = all ? members : [me];
+  const markable = shown.some((m) => canMark(m.id, me, TENANT));
   return `
     <button class="back" data-back>← All events</button>
     <div class="topbar">
       <div>
         <h1>${esc(event.title)}</h1>
-        <p class="muted tiny">${esc(fmtEventDate(event.event_date, event.start_time))}${event.location ? ` · ${esc(event.location)}` : ""}${hc.marked ? ` · ${hc.present + hc.late} of ${hc.marked} marked showed up` : ""}</p>
+        <p class="muted tiny">${esc(fmtEventDate(event.event_date, event.start_time))}${event.location ? ` · ${esc(event.location)}` : ""}${all && hc.marked ? ` · ${hc.present + hc.late} of ${hc.marked} marked showed up` : ""}</p>
       </div>
       ${canManage() ? `<button class="btn btn-ghost btn-sm" data-edit-event="${esc(event.id)}">Edit</button>` : ""}
     </div>
     ${error ? `<div class="error">${esc(error)}</div>` : ""}
-    ${canManage() ? `<p class="tiny muted" style="margin:0 2px 8px">Tap a status to cycle: present → late → excused → absent.</p>` : ""}
+    ${all ? "" : `<p class="tiny muted" style="margin:0 2px 8px" data-testid="scope-note">${IN_SPACE ? "In a shared space, the steward takes attendance." : "An adult takes attendance."} You see your own.</p>`}
+    ${markable ? `<p class="tiny muted" style="margin:0 2px 8px">Tap a status to cycle: present → late → excused → absent.</p>` : ""}
     <div class="stack">
-      ${members.map((m) => {
+      ${shown.map((m) => {
         const rec = marks.get(m.id);
         const meta = rec ? statusMeta(rec.status) : null;
         return `
           <div class="roster-row">
             <span class="roster-name">${esc(m.name)}</span>
-            ${canManage()
+            ${canMark(m.id, me, TENANT)
               ? `<button class="status-btn ${rec ? esc(rec.status) : ""}" data-cycle="${esc(m.id)}">${meta ? `${glyph(meta.glyph, { accent: "currentColor" })} ${esc(meta.label)}` : "— tap to mark"}</button>`
               : `<span class="status-chip">${meta ? `${glyph(meta.glyph, { accent: "currentColor" })} ${esc(meta.label)}` : "—"}</span>`}
           </div>`;
@@ -629,7 +676,7 @@ function openEventEditor(existing) {
       </div>
       <div class="field"><label for="e-notes">Notes</label><textarea id="e-notes">${esc(ev?.notes ?? "")}</textarea></div>
       <div class="modal-actions">
-        ${ev ? `<button type="button" class="btn btn-danger modal-left" data-delete-event="${esc(ev.id)}">Delete</button>` : ""}
+        ${ev && canTakeRoll() ? `<button type="button" class="btn btn-danger modal-left" data-delete-event="${esc(ev.id)}">Delete</button>` : ""}
         <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
         <button type="submit" class="btn">${ev ? "Save" : "Add"}</button>
       </div>

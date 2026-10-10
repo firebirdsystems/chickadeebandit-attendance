@@ -3,6 +3,39 @@
  * No DOM, no fetch — importable in both browser and test environments.
  */
 
+import { isAdult } from "./shared.js";
+
+/**
+ * Whether a member takes the roll: reads everyone's marks and writes a mark
+ * for someone else. Mirrors the hub's rule for the records table
+ * (adult_writable with a member read column): any adult in a household, and
+ * only the steward in a shared space. Everyone else reads their own marks
+ * alone, and a mark they wrote for another member would be refused.
+ */
+export function takesAttendance(member, { tenantKind = "household", isAdmin = false } = {}) {
+  return tenantKind === "household" ? isAdult(member) : isAdmin === true;
+}
+
+/**
+ * Whether a member may add, edit and delete events and start a series.
+ * Mirrors the hub's rule for the events and series tables (adult_writable,
+ * steward_writes_only): any adult, except in a roster space, where every
+ * write belongs to the steward.
+ */
+export function managesSchedule(member, { tenantKind = "household", spaceKind = null, isAdmin = false } = {}) {
+  if (tenantKind !== "household" && spaceKind === "roster") return isAdmin === true;
+  return isAdult(member);
+}
+
+/**
+ * Whether `member` may set the mark of the member `memberId`: only whoever
+ * takes attendance. The hub would accept a space participant's mark on their
+ * own row, but a roll people can overwrite for themselves is not a roll.
+ */
+export function canMark(memberId, member, tenant = {}) {
+  return !!member && takesAttendance(member, tenant);
+}
+
 export const STATUSES = [
   { value: "present", label: "Present", glyph: "tick" },
   { value: "late",    label: "Late",    glyph: "clock" },

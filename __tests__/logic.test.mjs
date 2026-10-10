@@ -5,6 +5,7 @@ import {
   occurrencesForSeries, seriesLabel, formatTime12, WEEKDAYS,
   chunkIds, MAX_BOUND_PARAMS, searchableFields,
   buildCalendarEvents, CALENDAR_EXPORT_MAX_EVENTS, CALENDAR_EXPORT_HORIZON_DAYS,
+  takesAttendance, managesSchedule, canMark,
 } from "../src/logic.js";
 
 const FROM = new Date(2026, 6, 12, 9, 0, 0); // July 12, 2026 local
@@ -238,5 +239,76 @@ describe("buildCalendarEvents", () => {
 
   it("publishes nothing when the household day is unreadable", () => {
     expect(buildCalendarEvents([ev()], "")).toEqual([]);
+  });
+});
+
+describe("who takes attendance and manages the schedule", () => {
+  const ADULT = { id: "a1", role: "adult" };
+  const CHILD = { id: "c1", role: "child" };
+  const PARTICIPANT = { tenantKind: "shared_space", spaceKind: "general", isAdmin: false };
+  const STEWARD = { tenantKind: "shared_space", spaceKind: "general", isAdmin: true };
+  const ROSTER_MEMBER = { tenantKind: "shared_space", spaceKind: "roster", isAdmin: false };
+  const ROSTER_STEWARD = { tenantKind: "shared_space", spaceKind: "roster", isAdmin: true };
+  const COPARENT_STEWARD = { tenantKind: "shared_space", spaceKind: "coparenting", isAdmin: true };
+
+  describe("takesAttendance", () => {
+    it("is every adult in a household, which is the default", () => {
+      expect(takesAttendance(ADULT)).toBe(true);
+      expect(takesAttendance(ADULT, { tenantKind: "household" })).toBe(true);
+    });
+    it("is never a child or nobody", () => {
+      expect(takesAttendance(CHILD)).toBe(false);
+      expect(takesAttendance(null)).toBe(false);
+    });
+    it("is not an adult who takes part in a shared space", () => {
+      expect(takesAttendance(ADULT, PARTICIPANT)).toBe(false);
+      expect(takesAttendance(ADULT, ROSTER_MEMBER)).toBe(false);
+    });
+    it("is the steward of any kind of shared space", () => {
+      expect(takesAttendance(ADULT, STEWARD)).toBe(true);
+      expect(takesAttendance(ADULT, ROSTER_STEWARD)).toBe(true);
+      expect(takesAttendance(ADULT, COPARENT_STEWARD)).toBe(true);
+    });
+  });
+
+  describe("managesSchedule", () => {
+    it("is every adult in a household and never a child", () => {
+      expect(managesSchedule(ADULT)).toBe(true);
+      expect(managesSchedule(CHILD)).toBe(false);
+      expect(managesSchedule(null)).toBe(false);
+    });
+    it("is every adult in a general shared space, steward or not", () => {
+      expect(managesSchedule(ADULT, PARTICIPANT)).toBe(true);
+      expect(managesSchedule(ADULT, STEWARD)).toBe(true);
+    });
+    it("is the steward alone in a roster space", () => {
+      expect(managesSchedule(ADULT, ROSTER_MEMBER)).toBe(false);
+      expect(managesSchedule(ADULT, ROSTER_STEWARD)).toBe(true);
+    });
+  });
+
+  describe("canMark", () => {
+    it("lets a household adult mark anyone", () => {
+      expect(canMark("c1", ADULT)).toBe(true);
+      expect(canMark("a1", ADULT)).toBe(true);
+    });
+    it("lets a child mark nobody, themself included", () => {
+      expect(canMark("c1", CHILD)).toBe(false);
+      expect(canMark("a1", CHILD)).toBe(false);
+    });
+    it("lets a space participant mark nobody, themself included", () => {
+      expect(canMark("a1", ADULT, PARTICIPANT)).toBe(false);
+      expect(canMark("other", ADULT, PARTICIPANT)).toBe(false);
+    });
+    it("lets the steward mark anyone", () => {
+      expect(canMark("other", ADULT, STEWARD)).toBe(true);
+      expect(canMark("other", ADULT, ROSTER_STEWARD)).toBe(true);
+    });
+    it("lets a roster member mark nobody, themself included", () => {
+      expect(canMark("a1", ADULT, ROSTER_MEMBER)).toBe(false);
+    });
+    it("refuses when there is no member", () => {
+      expect(canMark("a1", null)).toBe(false);
+    });
   });
 });
