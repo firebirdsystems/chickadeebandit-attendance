@@ -1,0 +1,253 @@
+{
+  "scenarios": [
+    {
+      "name": "in a shared space a participant sees only their own mark and no roll or series controls; the steward gets the whole roll",
+      "context": "shared_space",
+      "members": {
+        "steward": "admin",
+        "pat": "adult",
+        "sam": "adult"
+      },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_attendance__events (id, title, event_date, created_by, created_at) VALUES ('ev1', 'Club night', '2026-01-12', ?, ?)",
+          "params": [
+            "{{steward}}",
+            "2026-01-01T00:00:00Z"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES ('r-pat', 'ev1', ?, 'present', ?, ?), ('r-sam', 'ev1', ?, 'absent', ?, ?)",
+          "params": [
+            "{{pat}}",
+            "{{steward}}",
+            "2026-01-01T00:00:00Z",
+            "{{sam}}",
+            "{{steward}}",
+            "2026-01-01T00:00:00Z"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_attendance__series (id, title, weekday, start_date, end_date, active, created_by, created_at) VALUES ('s1', 'Winter practice', 1, '2026-01-05', '2026-01-26', 1, ?, ?)",
+          "params": [
+            "{{steward}}",
+            "2026-01-01T00:00:00Z"
+          ]
+        },
+        {
+          "action": "open",
+          "as": "pat"
+        },
+        {
+          "action": "expectVisible",
+          "as": "pat",
+          "selector": "[data-testid=\"series-card\"][data-series-id=\"s1\"][data-editable=\"false\"]"
+        },
+        {
+          "action": "expectVisible",
+          "as": "pat",
+          "selector": "[data-testid=\"series-note\"]"
+        },
+        {
+          "action": "expectCount",
+          "as": "pat",
+          "selector": "[data-testid=\"summary-row\"]",
+          "count": 1
+        },
+        {
+          "action": "expectVisible",
+          "as": "pat",
+          "selector": "[data-testid=\"add-event\"]"
+        },
+        {
+          "action": "click",
+          "as": "pat",
+          "selector": "[data-testid=\"event-card\"][data-event-id=\"ev1\"]"
+        },
+        {
+          "action": "expectVisible",
+          "as": "pat",
+          "selector": "[data-testid=\"scope-note\"]"
+        },
+        {
+          "action": "expectCount",
+          "as": "pat",
+          "selector": "[data-testid=\"roster-row\"]",
+          "count": 1
+        },
+        {
+          "action": "expectCount",
+          "as": "pat",
+          "selector": "[data-testid=\"mark-button\"]",
+          "count": 0
+        },
+        {
+          "action": "expectText",
+          "as": "pat",
+          "selector": "[data-testid=\"mark-chip\"]",
+          "text": "Present"
+        },
+        {
+          "action": "open",
+          "as": "steward"
+        },
+        {
+          "action": "expectVisible",
+          "as": "steward",
+          "selector": "[data-testid=\"series-card\"][data-series-id=\"s1\"][data-editable=\"true\"]"
+        },
+        {
+          "action": "expectCount",
+          "as": "steward",
+          "selector": "[data-testid=\"series-note\"]",
+          "count": 0
+        },
+        {
+          "action": "expectCount",
+          "as": "steward",
+          "selector": "[data-testid=\"summary-row\"]",
+          "count": 2
+        },
+        {
+          "action": "click",
+          "as": "steward",
+          "selector": "[data-testid=\"event-card\"][data-event-id=\"ev1\"]"
+        },
+        {
+          "action": "expectCount",
+          "as": "steward",
+          "selector": "[data-testid=\"scope-note\"]",
+          "count": 0
+        },
+        {
+          "action": "expectCount",
+          "as": "steward",
+          "selector": "[data-testid=\"roster-row\"]",
+          "count": 3
+        },
+        {
+          "action": "expectCount",
+          "as": "steward",
+          "selector": "[data-testid=\"mark-button\"]",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "name": "in a roster a participant is offered no way to add an event or a series; the steward is",
+      "context": "shared_space.roster",
+      "members": {
+        "steward": "admin",
+        "pat": "adult",
+        "sam": "adult"
+      },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_attendance__events (id, title, event_date, created_by, created_at) VALUES ('ev1', 'Club night', '2026-01-12', ?, ?)",
+          "params": [
+            "{{steward}}",
+            "2026-01-01T00:00:00Z"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES ('r-pat', 'ev1', ?, 'present', ?, ?), ('r-sam', 'ev1', ?, 'absent', ?, ?)",
+          "params": [
+            "{{pat}}",
+            "{{steward}}",
+            "2026-01-01T00:00:00Z",
+            "{{sam}}",
+            "{{steward}}",
+            "2026-01-01T00:00:00Z"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_attendance__series (id, title, weekday, start_date, end_date, active, created_by, created_at) VALUES ('s1', 'Winter practice', 1, '2026-01-05', '2026-01-26', 1, ?, ?)",
+          "params": [
+            "{{steward}}",
+            "2026-01-01T00:00:00Z"
+          ]
+        },
+        {
+          "action": "open",
+          "as": "pat"
+        },
+        {
+          "action": "expectVisible",
+          "as": "pat",
+          "selector": "[data-testid=\"event-card\"][data-event-id=\"ev1\"]"
+        },
+        {
+          "action": "expectCount",
+          "as": "pat",
+          "selector": "[data-testid=\"series-card\"]",
+          "count": 0
+        },
+        {
+          "action": "expectCount",
+          "as": "pat",
+          "selector": "[data-testid=\"add-event\"]",
+          "count": 0
+        },
+        {
+          "action": "expectCount",
+          "as": "pat",
+          "selector": "[data-testid=\"add-series\"]",
+          "count": 0
+        },
+        {
+          "action": "click",
+          "as": "pat",
+          "selector": "[data-testid=\"event-card\"][data-event-id=\"ev1\"]"
+        },
+        {
+          "action": "expectCount",
+          "as": "pat",
+          "selector": "[data-testid=\"mark-button\"]",
+          "count": 0
+        },
+        {
+          "action": "expectText",
+          "as": "pat",
+          "selector": "[data-testid=\"mark-chip\"]",
+          "text": "Present"
+        },
+        {
+          "action": "open",
+          "as": "steward"
+        },
+        {
+          "action": "expectVisible",
+          "as": "steward",
+          "selector": "[data-testid=\"add-event\"]"
+        },
+        {
+          "action": "expectVisible",
+          "as": "steward",
+          "selector": "[data-testid=\"add-series\"]"
+        },
+        {
+          "action": "expectVisible",
+          "as": "steward",
+          "selector": "[data-testid=\"series-card\"][data-series-id=\"s1\"][data-editable=\"true\"]"
+        },
+        {
+          "action": "click",
+          "as": "steward",
+          "selector": "[data-testid=\"event-card\"][data-event-id=\"ev1\"]"
+        },
+        {
+          "action": "expectCount",
+          "as": "steward",
+          "selector": "[data-testid=\"mark-button\"]",
+          "count": 3
+        }
+      ]
+    }
+  ]
+}

@@ -531,7 +531,7 @@ function renderEventList() {
     const hc = headcount(records, e.id);
     const mine = all ? null : records.find((r) => r.event_id === e.id && r.member_id === me?.id);
     return `
-      <button class="event-card" data-open="${esc(e.id)}">
+      <button class="event-card" data-testid="event-card" data-event-id="${esc(e.id)}" data-open="${esc(e.id)}">
         <div class="event-body">
           <div class="event-title">${esc(e.title)}${e.series_id ? ` <span class="muted" title="Recurring">↻</span>` : ""}</div>
           <div class="event-meta">${esc(fmtEventDate(e.event_date, e.start_time))}${e.location ? ` · ${esc(e.location)}` : ""}</div>
@@ -547,7 +547,7 @@ function renderEventList() {
         <h1>${glyph("tick")} Attendance</h1>
         <p class="muted tiny">Take the roll in seconds; spot who's drifting.</p>
       </div>
-      ${canManage() ? `<button class="btn" data-add-event>+ Event</button>` : ""}
+      ${canManage() ? `<button class="btn" data-testid="add-event" data-add-event>+ Event</button>` : ""}
     </div>
     ${error ? `<div class="error">${esc(error)}</div>` : ""}
     ${events.length ? `<div class="search-row"><input id="search" class="search-input" type="search" placeholder="Search events…" aria-label="Search events" value="${esc(searchQ)}" /></div>` : ""}
@@ -560,7 +560,7 @@ function renderEventList() {
       <div class="section-head"><h2>${all ? "Attendance rates" : "Your attendance"}</h2><span class="tiny muted">past events</span></div>
       <div class="stack">
         ${summary.map((s) => `
-          <div class="summary-row">
+          <div class="summary-row" data-testid="summary-row" data-member-id="${esc(s.member_id)}">
             <span class="summary-name">${esc(memberName(s.member_id))}</span>
             <div class="bar"><span style="width:${s.rate}%"></span></div>
             <span class="rate">${s.rate}% <span class="muted tiny">(${s.attended}/${s.marked})</span></span>
@@ -581,14 +581,14 @@ function renderSeriesSection() {
         </div>
         <span class="pill">Series</span>`;
   return `
-    <div class="section-head"><h2>Recurring</h2><button class="btn btn-ghost btn-sm" data-add-series>+ Series</button></div>
+    <div class="section-head"><h2>Recurring</h2><button class="btn btn-ghost btn-sm" data-testid="add-series" data-add-series>+ Series</button></div>
     ${active.length && !editable ? `<p class="tiny muted" style="margin:0 2px 8px" data-testid="series-note">Only ${WHO_TAKES_ROLL} can edit or stop a series.</p>` : ""}
     ${active.length ? `<div class="stack">${active.map((s) => editable
       ? `
-      <button class="event-card" data-edit-series="${esc(s.id)}">${body(s)}
+      <button class="event-card" data-testid="series-card" data-series-id="${esc(s.id)}" data-editable="true" data-edit-series="${esc(s.id)}">${body(s)}
       </button>`
       : `
-      <div class="event-card" style="cursor:default">${body(s)}
+      <div class="event-card" data-testid="series-card" data-series-id="${esc(s.id)}" data-editable="false" style="cursor:default">${body(s)}
       </div>`).join("")}</div>`
       : `<div class="card empty tiny">No recurring series — add one to auto-schedule practices onto the calendar and Today view.</div>`}
   `;
@@ -618,11 +618,11 @@ function renderEvent(event) {
         const rec = marks.get(m.id);
         const meta = rec ? statusMeta(rec.status) : null;
         return `
-          <div class="roster-row">
+          <div class="roster-row" data-testid="roster-row" data-member-id="${esc(m.id)}">
             <span class="roster-name">${esc(m.name)}</span>
             ${canMark(m.id, me, TENANT)
-              ? `<button class="status-btn ${rec ? esc(rec.status) : ""}" data-cycle="${esc(m.id)}">${meta ? `${glyph(meta.glyph, { accent: "currentColor" })} ${esc(meta.label)}` : "— tap to mark"}</button>`
-              : `<span class="status-chip">${meta ? `${glyph(meta.glyph, { accent: "currentColor" })} ${esc(meta.label)}` : "—"}</span>`}
+              ? `<button class="status-btn ${rec ? esc(rec.status) : ""}" data-testid="mark-button" data-member-id="${esc(m.id)}" data-cycle="${esc(m.id)}">${meta ? `${glyph(meta.glyph, { accent: "currentColor" })} ${esc(meta.label)}` : "— tap to mark"}</button>`
+              : `<span class="status-chip" data-testid="mark-chip" data-member-id="${esc(m.id)}">${meta ? `${glyph(meta.glyph, { accent: "currentColor" })} ${esc(meta.label)}` : "—"}</span>`}
           </div>`;
       }).join("")}
     </div>

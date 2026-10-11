@@ -171,6 +171,23 @@
           "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "r-b", "status": "present" }] }
         }
       ]
+    },
+    {
+      "name": "in a roster only the steward creates events and marks attendance; a participant reads their own mark and writes nothing",
+      "context": "shared_space.roster",
+      "members": {"a": "adult", "b": "adult", "steward": "admin"},
+      "steps": [
+        {"action": "db", "as": "steward", "sql": "INSERT INTO app_attendance__events (id, title, event_date, created_by, created_at) VALUES (?, ?, ?, ?, ?)", "params": ["ev1", "Class", "2026-08-04", "{{steward}}", "2026-01-01T00:00:00Z"], "expect": {"status": 200}},
+        {"action": "db", "as": "a", "sql": "INSERT INTO app_attendance__events (id, title, event_date, created_by, created_at) VALUES (?, ?, ?, ?, ?)", "params": ["ev2", "Mine", "2026-08-05", "{{a}}", "2026-01-01T00:00:00Z"], "expect": {"status": 403}},
+        {"action": "db", "as": "a", "sql": "UPDATE app_attendance__events SET title = 'Renamed' WHERE id = 'ev1'", "expect": {"status": 403}},
+        {"action": "db", "as": "steward", "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?)", "params": ["r-a", "ev1", "{{a}}", "present", "{{steward}}", "2026-01-01T00:00:00Z"], "expect": {"status": 200}},
+        {"action": "db", "as": "steward", "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?)", "params": ["r-b", "ev1", "{{b}}", "absent", "{{steward}}", "2026-01-01T00:00:00Z"], "expect": {"status": 200}},
+        {"action": "db", "as": "a", "sql": "INSERT INTO app_attendance__records (id, event_id, member_id, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?)", "params": ["r-x", "ev1", "{{a}}", "late", "{{a}}", "2026-01-01T00:00:00Z"], "expect": {"status": 403}},
+        {"action": "db", "as": "a", "sql": "UPDATE app_attendance__records SET status = 'late' WHERE id = 'r-a'", "expect": {"status": 403}},
+        {"action": "db", "as": "a", "sql": "SELECT id, status FROM app_attendance__records", "expect": {"status": 200, "rowCount": 1, "rowsContain": [{"id": "r-a", "status": "present"}]}},
+        {"action": "db", "as": "a", "sql": "SELECT id, title FROM app_attendance__events", "expect": {"status": 200, "rowCount": 1, "rowsContain": [{"id": "ev1", "title": "Class"}]}},
+        {"action": "db", "as": "steward", "sql": "SELECT id FROM app_attendance__records ORDER BY id", "expect": {"status": 200, "rowCount": 2}}
+      ]
     }
   ]
 }
