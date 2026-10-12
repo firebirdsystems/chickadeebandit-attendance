@@ -87,6 +87,8 @@
     .section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 18px 2px 8px; }
     .empty { color: var(--muted); text-align: center; padding: 30px 16px; }
     .error { background: var(--red-soft); color: var(--red); padding: 9px 12px; border-radius: 8px; margin-bottom: 10px; font-size: .86rem; }
+    .load-error { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: var(--hub-tint-danger, #fee2e2); color: var(--hub-tint-danger-fg, #b91c1c); font-size: 0.9rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+    .load-error-retry { background: none; border: 1px solid currentColor; border-radius: 8px; padding: 5px 10px; font: inherit; font-weight: 600; color: inherit; cursor: pointer; flex-shrink: 0; }
     input, select, textarea {
       width: 100%; border: 1.5px solid var(--border-mid); border-radius: 8px;
       padding: 9px 11px; font: inherit; background: var(--surface); color: var(--text);
@@ -157,6 +159,7 @@ let series = [];
 let openEventId = null;
 let searchQ = "";       // in-app search (see logic.js searchableFields)
 let error = "";
+let loadFailed = false; // first load failed; cleared when a load succeeds
 let modalEl = null;
 
 function nowIso() { return new Date().toISOString(); }
@@ -185,8 +188,8 @@ async function db(sql, params = []) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sql, params }),
   });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok || json.error) throw new Error(json.error || "That could not be saved");
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json || typeof json !== "object" || json.error) throw new Error(json?.error || "That could not be saved");
   return json;
 }
 
@@ -200,10 +203,13 @@ async function loadMembers() {
       { id: "demo-4", name: "Riley", role: "child" },
     ];
   } else {
-    try {
-      const res = await fetch(`${CONTEXT}?keys=family.members`);
-      members = ((await res.json())["family.members"]) ?? [];
-    } catch { members = []; }
+    // A roster that could not be read is a failed load, not an empty group.
+    const res = await fetch(`${CONTEXT}?keys=family.members`);
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json || typeof json !== "object" || json.error) throw new Error("Could not load the member list");
+    // The hub answers 200 and names a key it could not resolve in `$errors`.
+    if (Array.isArray(json.$errors) && json.$errors.includes("family.members")) throw new Error("context: family.members did not resolve");
+    members = json["family.members"] ?? [];
   }
   memberMap = new Map(members.map((m) => [m.id, m]));
   me = HUB_MEMBER ?? members[0] ?? { id: "guest", name: "Guest", role: "adult" };
@@ -239,6 +245,9 @@ async function refresh() {
   error = "";
   try {
     await Promise.all([loadMembers(), loadData()]);
+    loadFailed = false;
+  } catch { loadFailed = true; render(); return; }
+  try {
     if (openEventId && !events.some((e) => e.id === openEventId)) openEventId = null;
     render();
     await ensureSeriesEvents();
@@ -547,14 +556,15 @@ function renderEventList() {
         <h1>${glyph("tick")} Attendance</h1>
         <p class="muted tiny">Take the roll in seconds; spot who's drifting.</p>
       </div>
-      ${canManage() ? `<button class="btn" data-testid="add-event" data-add-event>+ Event</button>` : ""}
+      ${canManage() && !loadFailed ? `<button class="btn" data-testid="add-event" data-add-event>+ Event</button>` : ""}
     </div>
+    ${loadFailed ? `<div class="load-error" data-testid="load-error" role="alert"><span>Couldn’t load attendance.</span> <button type="button" class="load-error-retry" data-testid="load-retry">Try again</button></div>` : ""}
     ${error ? `<div class="error">${esc(error)}</div>` : ""}
     ${events.length ? `<div class="search-row"><input id="search" class="search-input" type="search" placeholder="Search events…" aria-label="Search events" value="${esc(searchQ)}" /></div>` : ""}
-    ${canManage() ? renderSeriesSection() : ""}
+    ${canManage() && !loadFailed ? renderSeriesSection() : ""}
     ${upcoming.length ? `<div class="section-head"><h2>Upcoming</h2></div><div class="stack">${upcoming.map(card).join("")}</div>` : ""}
     ${past.length ? `<div class="section-head"><h2>Past</h2></div><div class="stack">${(searchQ ? past : past.slice(0, 20)).map(card).join("")}</div>` : ""}
-    ${!events.length ? `<div class="card empty">No events yet${canManage() ? " — add your first meeting" : ""}.</div>` : ""}
+    ${!events.length && !loadFailed ? `<div class="card empty">No events yet${canManage() ? " — add your first meeting" : ""}.</div>` : ""}
     ${events.length && searchQ && !matched.length ? `<div class="card empty">No events match "${esc(searchQ)}".</div>` : ""}
     ${summary.length ? `
       <div class="section-head"><h2>${all ? "Attendance rates" : "Your attendance"}</h2><span class="tiny muted">past events</span></div>
@@ -760,6 +770,7 @@ function openSeriesEditor(existing) {
 document.addEventListener("click", (e) => {
   const t = e.target.closest("button");
   if (!t) return;
+  if (t.matches('[data-testid="load-retry"]')) { refresh(); return; }
   if (t.hasAttribute("data-open")) { openEventId = t.getAttribute("data-open"); render(); return; }
   if (t.hasAttribute("data-back")) { openEventId = null; render(); return; }
   if (t.hasAttribute("data-cancel")) { closeModal(); return; }
