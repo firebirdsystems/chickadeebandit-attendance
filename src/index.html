@@ -193,6 +193,12 @@ async function db(sql, params = []) {
   return json;
 }
 
+// Wording this app wrote for the reader is marked where it is thrown. A failed
+// write shows that wording, or one fixed line for the action; the hub's own
+// error text goes to the console.
+function userError(msg) { return Object.assign(new Error(msg), { forUser: true }); }
+function failText(e, line) { if (!e?.forUser) console.error(e); return e?.forUser ? e.message : line; }
+
 /* ── Loading ───────────────────────────────────────────────────────────────── */
 async function loadMembers() {
   if (!CONTEXT) {
@@ -251,10 +257,21 @@ async function refresh() {
     if (openEventId && !events.some((e) => e.id === openEventId)) openEventId = null;
     render();
     await ensureSeriesEvents();
-  } catch (e) { error = e.message; render(); }
+  } catch (e) { error = failText(e, "Couldn’t add the upcoming sessions."); render(); }
 }
 
 function showError(msg) { error = msg; render(); }
+
+// A save the hub refused: the form stays open as typed, says so in its own
+// error line, and its button works again.
+function saveFailed() {
+  const line = modalEl?.querySelector("[data-form-error]");
+  if (!line) { showError("Couldn’t save — try again."); return; }
+  line.textContent = "Couldn’t save — try again.";
+  line.hidden = false;
+  const btn = modalEl.querySelector('button[type="submit"]');
+  if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label ?? btn.textContent; }
+}
 
 /**
  * Republish the `calendar_events` export so the schedule shows up on the
@@ -298,39 +315,38 @@ async function publishEvent(type, subjectId, payload = {}) {
 async function saveEvent(fields, existingId) {
   const now = nowIso();
   if (existingId) {
-    const idx = events.findIndex((e) => e.id === existingId);
-    const prev = idx !== -1 ? events[idx] : null;
-    if (idx !== -1) events[idx] = { ...events[idx], ...fields };
-    closeModal(); render();
+    // The form stays open until the hub has the edit: a refused save leaves
+    // what was typed in place to send again (see saveFailed).
     try {
       await db("UPDATE app_attendance__events SET title=?, kind=?, event_date=?, start_time=?, location=?, notes=? WHERE id=?",
         [fields.title, fields.kind, fields.event_date, fields.start_time, fields.location, fields.notes, existingId]);
-      await syncCalendar();
-    } catch (e) { if (idx !== -1 && prev) events[idx] = prev; showError(e.message); }
+    } catch { saveFailed(); return; }
+    const idx = events.findIndex((e) => e.id === existingId);
+    if (idx !== -1) events[idx] = { ...events[idx], ...fields };
+    error = "";
+    closeModal(); render();
+    await syncCalendar();
   } else {
     const row = { id: crypto.randomUUID(), ...fields, created_by: me.id, created_at: now };
-    events = [row, ...events];
-    openEventId = row.id;
-    closeModal(); render();
     try {
       await db("INSERT INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
         [row.id, row.title, row.kind, row.event_date, row.start_time, row.location, row.notes, row.created_by, row.created_at]);
-      // Only the hand-created one-off. The series stamper writes ~28 days of
-      // occurrences at a time and re-runs on every load, so publishing there
-      // would fire a burst of events for sessions nobody just scheduled.
-      await publishEvent("attendance.session_created", row.id, {
-        title: row.title,
-        kind: row.kind,
-        event_date: row.event_date,
-        start_time: row.start_time,
-        location: row.location,
-      });
-      await syncCalendar();
-    } catch (e) {
-      events = events.filter((x) => x.id !== row.id);
-      openEventId = null;
-      showError(e.message);
-    }
+    } catch { saveFailed(); return; }
+    events = [row, ...events];
+    openEventId = row.id;
+    error = "";
+    closeModal(); render();
+    // Only the hand-created one-off. The series stamper writes ~28 days of
+    // occurrences at a time and re-runs on every load, so publishing there
+    // would fire a burst of events for sessions nobody just scheduled.
+    await publishEvent("attendance.session_created", row.id, {
+      title: row.title,
+      kind: row.kind,
+      event_date: row.event_date,
+      start_time: row.start_time,
+      location: row.location,
+    });
+    await syncCalendar();
   }
 }
 
@@ -351,7 +367,7 @@ async function deleteEvent(id) {
   try {
     await db("DELETE FROM app_attendance__events WHERE id=?", [id]);
     await syncCalendar();
-  } catch (e) { ({ events, records } = prev); showError(e.message); }
+  } catch (e) { ({ events, records } = prev); showError(failText(e, "Couldn’t delete the event — try again.")); }
 }
 
 /** Tap-to-cycle a member's status for an event. Upserts. */
@@ -367,8 +383,8 @@ async function cycleStatus(eventId, memberId) {
     render();
     try {
       const { changed } = await db("UPDATE app_attendance__records SET status=?, recorded_by=? WHERE id=?", [status, me.id, existing.id]);
-      if (changed === 0) throw new Error(`That mark was not changed. Only ${WHO_TAKES_ROLL} can change it.`);
-    } catch (e) { Object.assign(existing, prev); showError(e.message); }
+      if (changed === 0) throw userError(`That mark was not changed. Only ${WHO_TAKES_ROLL} can change it.`);
+    } catch (e) { Object.assign(existing, prev); showError(failText(e, "Couldn’t save the mark — try again.")); }
     return;
   }
   const row = { id: crypto.randomUUID(), event_id: eventId, member_id: memberId, status, note: "", recorded_by: me.id, created_at: now };
@@ -377,7 +393,7 @@ async function cycleStatus(eventId, memberId) {
   try {
     await db("INSERT INTO app_attendance__records (id, event_id, member_id, status, note, recorded_by, created_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT (event_id, member_id) DO UPDATE SET status = excluded.status, recorded_by = excluded.recorded_by",
       [row.id, row.event_id, row.member_id, row.status, row.note, row.recorded_by, row.created_at]);
-  } catch (e) { records = records.filter((r) => r.id !== row.id); showError(e.message); }
+  } catch (e) { records = records.filter((r) => r.id !== row.id); showError(failText(e, "Couldn’t save the mark — try again.")); }
 }
 
 /* ── Recurring series ──────────────────────────────────────────────────────── */
@@ -415,7 +431,7 @@ async function ensureSeriesEvents() {
       await db("INSERT OR IGNORE INTO app_attendance__events (id, title, kind, event_date, start_time, location, notes, series_id, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
         [row.id, row.title, row.kind, row.event_date, row.start_time, row.location, row.notes, row.series_id, row.created_by, row.created_at]);
       events.push(row);
-    } catch (e) { showError(e.message); }
+    } catch (e) { showError(failText(e, "Couldn’t add the upcoming sessions.")); }
   }
   await syncCalendar();
   render();
@@ -441,7 +457,7 @@ async function ensureSeriesEvents() {
  * them and be deleted.
  */
 async function pruneSeriesFutureEvents(seriesId) {
-  if (!canTakeRoll()) throw new Error(`Only ${WHO_TAKES_ROLL} can change a series.`);
+  if (!canTakeRoll()) throw userError(`Only ${WHO_TAKES_ROLL} can change a series.`);
   const today = todayIso();
   const candidates = await db(
     "SELECT id FROM app_attendance__events WHERE series_id = ? AND event_date >= ? ORDER BY event_date ASC LIMIT 2000",
@@ -481,24 +497,26 @@ async function saveSeries(fields, existingId) {
   if (existingId) {
     // Editing re-stamps the series, which prunes its future sessions.
     if (!canTakeRoll()) { closeModal(); showError(`Only ${WHO_TAKES_ROLL} can change a series.`); return; }
-    const idx = series.findIndex((s) => s.id === existingId);
-    const prev = idx !== -1 ? series[idx] : null;
-    if (idx !== -1) series[idx] = { ...series[idx], ...fields };
-    closeModal(); render();
     try {
       await db("UPDATE app_attendance__series SET title=?, kind=?, weekday=?, interval_weeks=?, start_time=?, location=?, notes=?, start_date=?, end_date=? WHERE id=?",
         [fields.title, fields.kind, fields.weekday, fields.interval_weeks, fields.start_time, fields.location, fields.notes, fields.start_date, fields.end_date, existingId]);
-      await restampSeries(existingId);
-    } catch (e) { if (idx !== -1 && prev) series[idx] = prev; showError(e.message); }
+    } catch { saveFailed(); return; }
+    const idx = series.findIndex((s) => s.id === existingId);
+    if (idx !== -1) series[idx] = { ...series[idx], ...fields };
+    error = "";
+    closeModal(); render();
+    // The rule is saved; a re-stamp that fails is its own message, not a failed save.
+    try { await restampSeries(existingId); } catch (e) { showError(failText(e, "The series was saved, but its upcoming sessions couldn’t be updated.")); }
   } else {
     const row = { id: crypto.randomUUID(), ...fields, active: 1, created_by: me.id, created_at: now };
-    series = [row, ...series];
-    closeModal(); render();
     try {
       await db("INSERT INTO app_attendance__series (id, title, kind, weekday, interval_weeks, start_time, location, notes, start_date, end_date, active, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
         [row.id, row.title, row.kind, row.weekday, row.interval_weeks, row.start_time, row.location, row.notes, row.start_date, row.end_date, row.active, row.created_by, row.created_at]);
-      await ensureSeriesEvents();
-    } catch (e) { series = series.filter((x) => x.id !== row.id); showError(e.message); }
+    } catch { saveFailed(); return; }
+    series = [row, ...series];
+    error = "";
+    closeModal(); render();
+    try { await ensureSeriesEvents(); } catch (e) { showError(failText(e, "The series was saved, but its upcoming sessions couldn’t be added.")); }
   }
 }
 
@@ -514,7 +532,7 @@ async function deactivateSeries(id) {
     await db("UPDATE app_attendance__series SET active = 0 WHERE id = ?", [id]);
     await pruneSeriesFutureEvents(id);
     render();
-  } catch (e) { if (idx !== -1 && prev) series[idx] = prev; showError(e.message); }
+  } catch (e) { if (idx !== -1 && prev) series[idx] = prev; showError(failText(e, "Couldn’t stop the series — try again.")); }
 }
 
 /* ── Rendering ─────────────────────────────────────────────────────────────── */
@@ -685,6 +703,7 @@ function openEventEditor(existing) {
         <div class="field"><label for="e-location">Location</label><input id="e-location" value="${esc(ev?.location ?? "")}" /></div>
       </div>
       <div class="field"><label for="e-notes">Notes</label><textarea id="e-notes">${esc(ev?.notes ?? "")}</textarea></div>
+      <div class="error" data-form-error data-testid="modal-error" role="alert" hidden></div>
       <div class="modal-actions">
         ${ev && canTakeRoll() ? `<button type="button" class="btn btn-danger modal-left" data-delete-event="${esc(ev.id)}">Delete</button>` : ""}
         <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
@@ -699,7 +718,7 @@ function openEventEditor(existing) {
     if (!title) { document.getElementById("e-title").focus(); return; }
     if (!date) { document.getElementById("e-date").focus(); return; }
     const btn = modalEl?.querySelector('button[type="submit"]');
-    if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+    if (btn) { btn.dataset.label = btn.textContent; btn.disabled = true; btn.textContent = "Saving…"; }
     saveEvent({
       title,
       kind: document.getElementById("e-kind").value,
@@ -707,7 +726,7 @@ function openEventEditor(existing) {
       start_time: document.getElementById("e-time").value,
       location: document.getElementById("e-location").value.trim(),
       notes: document.getElementById("e-notes").value.trim(),
-    }, ev?.id ?? null).catch((err) => showError(err.message));
+    }, ev?.id ?? null).catch(() => saveFailed());
   });
 }
 
@@ -737,6 +756,7 @@ function openSeriesEditor(existing) {
         <div class="field"><label for="s-end">Ends (optional)</label><input id="s-end" type="date" value="${esc(s?.end_date ?? "")}" /></div>
       </div>
       <div class="field"><label for="s-location">Location</label><input id="s-location" value="${esc(s?.location ?? "")}" /></div>
+      <div class="error" data-form-error data-testid="modal-error" role="alert" hidden></div>
       <div class="modal-actions">
         ${s ? `<button type="button" class="btn btn-danger modal-left" data-deactivate-series="${esc(s.id)}">Stop</button>` : ""}
         <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
@@ -751,7 +771,7 @@ function openSeriesEditor(existing) {
     if (!title) { document.getElementById("s-title").focus(); return; }
     if (!start_date) { document.getElementById("s-start").focus(); return; }
     const btn = modalEl?.querySelector('button[type="submit"]');
-    if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+    if (btn) { btn.dataset.label = btn.textContent; btn.disabled = true; btn.textContent = "Saving…"; }
     saveSeries({
       title,
       kind: document.getElementById("s-kind").value,
@@ -762,7 +782,7 @@ function openSeriesEditor(existing) {
       notes: s?.notes ?? "",
       start_date,
       end_date: document.getElementById("s-end").value,
-    }, s?.id ?? null).catch((err) => showError(err.message));
+    }, s?.id ?? null).catch(() => saveFailed());
   });
 }
 
@@ -780,7 +800,7 @@ document.addEventListener("click", (e) => {
   if (t.hasAttribute("data-add-series")) { openSeriesEditor(null); return; }
   if (t.hasAttribute("data-edit-series")) { openSeriesEditor(series.find((x) => x.id === t.getAttribute("data-edit-series"))); return; }
   if (t.hasAttribute("data-deactivate-series")) { deactivateSeries(t.getAttribute("data-deactivate-series")); return; }
-  if (t.hasAttribute("data-cycle") && openEventId) { cycleStatus(openEventId, t.getAttribute("data-cycle")).catch((err) => showError(err.message)); return; }
+  if (t.hasAttribute("data-cycle") && openEventId) { cycleStatus(openEventId, t.getAttribute("data-cycle")).catch((err) => showError(failText(err, "Couldn’t save the mark — try again."))); return; }
 });
 
 refresh();
