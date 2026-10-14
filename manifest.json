@@ -133,9 +133,6 @@
   "nav": {
     "label": "Attendance"
   },
-  "resource_limits": {
-    "max_db_bytes": 52428800
-  },
   "ai_access": {
     "allowed": true,
     "mode": "read",
