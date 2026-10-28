@@ -18,7 +18,7 @@
 -- expansion happens in JS over decrypted rows; agenda/glance only touch the
 -- already-plaintext event_date / start_time).
 CREATE TABLE IF NOT EXISTS app_attendance__series (
-  id             TEXT PRIMARY KEY,
+  id             TEXT NOT NULL PRIMARY KEY,
   title          TEXT NOT NULL,                  -- "Tuesday practice"
   kind           TEXT NOT NULL DEFAULT 'practice', -- meeting|practice|service|other
   weekday        INTEGER NOT NULL,               -- 0=Sun .. 6=Sat

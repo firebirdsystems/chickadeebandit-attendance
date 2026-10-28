@@ -13,7 +13,7 @@
 -- excused|late) is a hub built-in plaintext column. Titles/locations/notes
 -- stay encrypted at rest.
 CREATE TABLE IF NOT EXISTS app_attendance__events (
-  id         TEXT PRIMARY KEY,
+  id         TEXT NOT NULL PRIMARY KEY,
   title      TEXT NOT NULL,                 -- "July pack meeting"
   kind       TEXT NOT NULL DEFAULT 'meeting', -- display only: meeting|practice|service|other
   event_date TEXT NOT NULL,                 -- ISO YYYY-MM-DD
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS app_attendance__events (
 );
 
 CREATE TABLE IF NOT EXISTS app_attendance__records (
-  id          TEXT PRIMARY KEY,
+  id          TEXT NOT NULL PRIMARY KEY,
   event_id    TEXT NOT NULL,
   member_id   TEXT NOT NULL,                -- who the mark is about
   status      TEXT NOT NULL DEFAULT 'present', -- present|absent|excused|late
